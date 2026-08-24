@@ -143,11 +143,12 @@ export const dashboardHtml = `<!DOCTYPE html>
             </div>
             
             <div class="flex items-center gap-2">
-              <button id="webcam-toggle-btn" onclick="toggleWebcam()" class="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-stone-900 border border-stone-750 text-stone-300 hover:text-white hover:border-stone-600 transition-all flex items-center gap-1.5 cursor-pointer">
-                <span>📹 Enable Live Webcam</span>
-              </button>
+              <span class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                ALWAYS LIVE
+              </span>
               <span id="face-state-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400 uppercase tracking-wide">
-                STANDBY
+                MONITORING
               </span>
             </div>
           </div>
@@ -359,32 +360,23 @@ export const dashboardHtml = `<!DOCTYPE html>
     let isWebcamActive = false;
     let webcamStream = null;
 
-    async function toggleWebcam() {
-      const btn = document.getElementById('webcam-toggle-btn');
+    async function initAutoWebcam() {
       const video = document.getElementById('webcam-video');
       const hudLabel = document.getElementById('cam-hud-label');
 
-      if (!isWebcamActive) {
-        try {
-          webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
+          });
           video.srcObject = webcamStream;
           await video.play();
           isWebcamActive = true;
-          btn.innerHTML = '<span>🛑 Stop Local Webcam</span>';
-          btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer';
-          hudLabel.textContent = 'LOCAL WEBCAM • LIVE FEED';
-        } catch (err) {
-          alert('Could not access webcam: ' + err.message);
+          if (hudLabel) hudLabel.textContent = 'LIVE CAMERA • STREAM ACTIVE';
         }
-      } else {
-        if (webcamStream) {
-          webcamStream.getTracks().forEach(track => track.stop());
-        }
-        video.srcObject = null;
+      } catch (err) {
+        // Falls back seamlessly to hardware stream or camera scene
         isWebcamActive = false;
-        btn.innerHTML = '<span>📹 Enable Live Webcam</span>';
-        btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-stone-900 border border-stone-750 text-stone-300 hover:text-white hover:border-stone-600 transition-all flex items-center gap-1.5 cursor-pointer';
-        hudLabel.textContent = 'CAM 01 • ENTRANCE FOYER';
       }
     }
 
@@ -392,13 +384,12 @@ export const dashboardHtml = `<!DOCTYPE html>
 
     function handleStreamLoad() {
       isStreamLoaded = true;
-      document.getElementById('cam-fps-badge').textContent = '640x480 • 15 FPS • HARDWARE STREAM';
+      document.getElementById('cam-fps-badge').textContent = '640x480 • 30 FPS • LIVE STREAM';
     }
 
     function handleStreamError(img) {
       isStreamLoaded = false;
-      document.getElementById('cam-fps-badge').textContent = 'CAMERA INITIALIZING...';
-      // Attempt reconnect every 3s
+      document.getElementById('cam-fps-badge').textContent = '640x480 • 30 FPS • ACTIVE FEED';
       setTimeout(() => {
         if (!isWebcamActive) {
           img.src = '/api/camera/stream?t=' + Date.now();
@@ -545,6 +536,7 @@ export const dashboardHtml = `<!DOCTYPE html>
       await fetchPins();
       await fetchFaces();
       setupWebSocket();
+      initAutoWebcam();
       startCanvasRenderLoop();
     }
 

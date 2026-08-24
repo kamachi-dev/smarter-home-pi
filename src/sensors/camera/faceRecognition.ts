@@ -8,7 +8,8 @@ import { config } from '../../config/env.js';
 
 // Load Face-API with Wasm backend
 // @ts-ignore
-import faceapi from '@vladmandic/face-api/dist/face-api.node-wasm.js';
+import * as faceapiModule from '@vladmandic/face-api/dist/face-api.node-wasm.js';
+const faceapi: any = (faceapiModule as any).nets ? faceapiModule : (faceapiModule as any).default || faceapiModule;
 
 export class FaceRecognitionEngine {
   private static instance: FaceRecognitionEngine;

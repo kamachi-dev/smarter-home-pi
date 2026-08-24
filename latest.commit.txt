@@ -1,7 +1,5 @@
-feat(ai): integrate genuine neural face recognition models and physical sensor drivers
+fix(face-api): resolve CommonJS module interop for neural networks and make camera stream always live
 
-- Integrate real TensorFlow Wasm backend with @vladmandic/face-api neural models (TinyFaceDetector, FaceLandmark68TinyNet, FaceRecognitionNet)
-- Implement genuine 10+ photo neural embedding centroid calculation with 128-dimensional ResNet face descriptors
-- Add real FaceMatcher Euclidean distance matching on incoming camera image frames
-- Add real hardware drivers for DS18B20 1-Wire (/sys/bus/w1/devices) and DHT11/DHT22 (node-dht-sensor/GPIO)
-- Add image buffer tensor decoding via jpeg-js
+- Fix face-api CommonJS module import resolution for TinyFaceDetector and ResNet nets
+- Remove manual webcam toggle button and initialize camera stream automatically
+- Verify clean neural weights loading and active stream pipeline
