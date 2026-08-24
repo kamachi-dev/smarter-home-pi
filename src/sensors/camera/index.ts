@@ -59,62 +59,93 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Spawns camera stream trying modern libcamera-vid, then v4l2 ffmpeg, then simulated generator
+   * Discovers and binds to attached physical camera hardware
    */
   private startCameraPipeline(): void {
     const isLinux = GpioManager.getInstance().isHardwareMode();
     if (!isLinux) {
-      console.log('[CameraSensor] Non-Linux host detected; starting live MJPEG frame generator');
-      this.startSimulatedFrameGenerator();
+      console.log('[CameraSensor] Non-Linux host detected; using standby buffer');
+      this.startStandbyFrameGenerator();
       return;
     }
 
+    this.scanAndLogHardwareVideoDevices();
     this.tryNextCaptureStrategy();
   }
 
+  private scanAndLogHardwareVideoDevices(): void {
+    try {
+      if (fs.existsSync('/dev')) {
+        const videoNodes = fs.readdirSync('/dev').filter(f => f.startsWith('video') || f.startsWith('media'));
+        console.log(`[CameraSensor] Physical video devices detected in /dev: [${videoNodes.join(', ') || 'None'}]`);
+      }
+    } catch {}
+  }
+
   private tryNextCaptureStrategy(): void {
-    const strategies = [
+    // Find available video devices
+    let v4lDevices = ['/dev/video0'];
+    try {
+      if (fs.existsSync('/dev')) {
+        const found = fs.readdirSync('/dev')
+          .filter(f => f.startsWith('video'))
+          .map(f => `/dev/${f}`);
+        if (found.length > 0) v4lDevices = found;
+      }
+    } catch {}
+
+    const strategies: Array<{ name: string; cmd: string; args: string[] }> = [
       {
-        name: 'libcamera-vid (RPi Modern CSI Camera)',
-        cmd: 'libcamera-vid',
-        args: ['--nopreview', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        name: 'rpicam-vid (RPi OS Bookworm / Bullseye CSI Camera)',
+        cmd: 'rpicam-vid',
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
       },
       {
-        name: 'ffmpeg (V4L2 / USB Camera)',
-        cmd: 'ffmpeg',
-        args: ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
+        name: 'libcamera-vid (Standard libcamera CSI Camera)',
+        cmd: 'libcamera-vid',
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
       }
     ];
 
+    // Add V4L2 ffmpeg strategies for all detected /dev/video* devices
+    for (const vdev of v4lDevices.slice(0, 3)) {
+      strategies.push({
+        name: `ffmpeg ${vdev} (V4L2 Video Device)`,
+        cmd: 'ffmpeg',
+        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', vdev, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
+      });
+    }
+
     if (this.captureStrategyIndex >= strategies.length) {
-      console.log('[CameraSensor] Hardware camera utilities finished discovery; running active high-performance MJPEG frame stream');
-      this.startSimulatedFrameGenerator();
+      console.warn('[CameraSensor] All hardware camera strategies tested. Could not establish live frame stream from attached camera. Using standby buffer.');
+      this.startStandbyFrameGenerator();
       return;
     }
 
     const current = strategies[this.captureStrategyIndex];
-    console.log(`[CameraSensor] Initializing hardware capture [${current.name}]...`);
+    console.log(`[CameraSensor] Testing camera strategy ${this.captureStrategyIndex + 1}/${strategies.length}: [${current.name}]...`);
     const startTime = Date.now();
 
     try {
       this.cameraProcess = spawn(current.cmd, current.args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      this.attachMjpegStreamParser(this.cameraProcess, startTime);
+      this.attachMjpegStreamParser(this.cameraProcess, startTime, current.name);
 
       if (this.cameraProcess.stderr) {
         this.cameraProcess.stderr.on('data', (data: Buffer) => {
-          const msg = data.toString();
-          // Filter out harmless bcm2835 flash LED notice on non-root shells
-          if (!msg.includes('bcm2835_init') && msg.trim()) {
-            console.debug(`[CameraSensor] ${current.cmd}:`, msg.trim());
+          const msg = data.toString().trim();
+          if (msg) {
+            console.log(`[CameraHardware: ${current.cmd}]`, msg);
           }
         });
       }
 
-      this.cameraProcess.on('error', () => {
+      this.cameraProcess.on('error', (err) => {
+        console.warn(`[CameraSensor] ${current.cmd} spawn error (${err.message}). Trying next strategy...`);
         this.captureStrategyIndex++;
         this.tryNextCaptureStrategy();
       });
-    } catch {
+    } catch (err) {
+      console.warn(`[CameraSensor] Failed to spawn ${current.cmd}: ${(err as Error).message}`);
       this.captureStrategyIndex++;
       this.tryNextCaptureStrategy();
     }
@@ -123,10 +154,11 @@ export class CameraSensor extends BaseSensor {
   /**
    * Parses incoming MJPEG stream chunks from camera stdout
    */
-  private attachMjpegStreamParser(proc: ChildProcess, spawnTime: number): void {
+  private attachMjpegStreamParser(proc: ChildProcess, spawnTime: number, strategyName: string): void {
     if (!proc.stdout) return;
     let buffer = Buffer.alloc(0);
     let receivedAnyFrame = false;
+    let frameCount = 0;
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
@@ -139,7 +171,11 @@ export class CameraSensor extends BaseSensor {
         if (eoi === -1) break;
 
         const jpegFrame = buffer.subarray(soi, eoi + 2);
-        receivedAnyFrame = true;
+        if (!receivedAnyFrame) {
+          receivedAnyFrame = true;
+          console.log(`[CameraSensor] ✅ SUCCESS: Live hardware frames streaming successfully via [${strategyName}]!`);
+        }
+        frameCount++;
         this.onNewCameraFrame(jpegFrame);
 
         buffer = buffer.subarray(eoi + 2);
@@ -148,10 +184,12 @@ export class CameraSensor extends BaseSensor {
 
     proc.on('close', (code) => {
       const runDuration = Date.now() - spawnTime;
-      if (!receivedAnyFrame || runDuration < 3000) {
+      if (!receivedAnyFrame || runDuration < 2000) {
+        console.warn(`[CameraSensor] Strategy [${strategyName}] exited after ${runDuration}ms (code ${code}).`);
         this.captureStrategyIndex++;
         this.tryNextCaptureStrategy();
       } else {
+        console.warn(`[CameraSensor] Camera stream via [${strategyName}] interrupted. Re-establishing...`);
         setTimeout(() => {
           if (this.isRunning) this.tryNextCaptureStrategy();
         }, 3000);
@@ -160,91 +198,22 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Generates standard 640x480 JPEG frames with rich CCTV scene, doorway, lighting, and ambient animation
+   * Clean, minimal standby buffer
    */
-  private startSimulatedFrameGenerator(): void {
+  private startStandbyFrameGenerator(): void {
     if (this.simulationInterval) return;
     const width = 640;
     const height = 480;
-    let tick = 0;
 
-    const generateFrame = (): Buffer => {
-      tick += 0.08;
+    const generateMinimalFrame = (): Buffer => {
       const frameData = Buffer.alloc(width * height * 4);
-      const isPersonInView = this.currentDetection && this.currentDetection.detected;
-      const personX = Math.floor(width / 2 + Math.sin(tick) * 15);
-      const personY = 160;
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-
-          // 1. Base Wall & Ceiling Gradient
-          let r = Math.floor(30 + (y / height) * 25);
-          let g = Math.floor(32 + (y / height) * 22);
-          let b = Math.floor(38 + (y / height) * 20);
-
-          // 2. Ceiling Light Cone
-          const dxLight = x - width / 2;
-          const distLight = Math.sqrt(dxLight * dxLight + (y - 30) * (y - 30));
-          if (distLight < 260) {
-            const intensity = (1 - distLight / 260) * 0.45;
-            r = Math.min(255, Math.floor(r + 250 * intensity));
-            g = Math.min(255, Math.floor(g + 220 * intensity));
-            b = Math.min(255, Math.floor(b + 140 * intensity));
-          }
-
-          // 3. Entrance Doorway (Centered: X 230 to 410, Y 80 to 360)
-          if (x >= 230 && x <= 410 && y >= 80 && y <= 360) {
-            if (x === 230 || x === 410 || y === 80 || y === 360) {
-              r = 120; g = 110; b = 100; // Door frame
-            } else {
-              r = Math.floor(20 + (y / 360) * 15);
-              g = Math.floor(18 + (y / 360) * 15);
-              b = Math.floor(16 + (y / 360) * 15);
-            }
-          }
-
-          // 4. Parquet Flooring Perspective (Y > 360)
-          if (y > 360) {
-            const plank = Math.floor((x + (y - 360) * 0.8) / 45) % 2;
-            const woodR = plank ? 55 : 45;
-            const woodG = plank ? 40 : 32;
-            const woodB = plank ? 30 : 25;
-            r = woodR; g = woodG; b = woodB;
-          }
-
-          // 5. Render Person Silhouette when in view
-          if (isPersonInView) {
-            // Head (circle radius 35)
-            const dxHead = x - personX;
-            const dyHead = y - (personY + 30);
-            if (dxHead * dxHead + dyHead * dyHead < 35 * 35) {
-              r = 240; g = 205; b = 175; // Skin tone
-            }
-            // Torso (ellipse)
-            const dxBody = (x - personX) / 55;
-            const dyBody = (y - (personY + 120)) / 65;
-            if (dxBody * dxBody + dyBody * dyBody < 1 && y >= personY + 50 && y <= personY + 180) {
-              r = 30; g = 45; b = 65; // Dark jacket
-            }
-          }
-
-          // 6. Security CCTV Scanlines
-          if (y % 4 === 0) {
-            r = Math.floor(r * 0.82);
-            g = Math.floor(g * 0.82);
-            b = Math.floor(b * 0.82);
-          }
-
-          frameData[idx] = r;
-          frameData[idx + 1] = g;
-          frameData[idx + 2] = b;
-          frameData[idx + 3] = 255;
-        }
+      for (let i = 0; i < width * height * 4; i += 4) {
+        frameData[i] = 20;     // R
+        frameData[i + 1] = 22; // G
+        frameData[i + 2] = 25; // B
+        frameData[i + 3] = 255;
       }
-
-      const encoded = jpeg.encode({ data: frameData, width, height }, 65);
+      const encoded = jpeg.encode({ data: frameData, width, height }, 50);
       return encoded.data;
     };
 
@@ -253,8 +222,8 @@ export class CameraSensor extends BaseSensor {
         if (this.simulationInterval) clearInterval(this.simulationInterval);
         return;
       }
-      this.onNewCameraFrame(generateFrame());
-    }, 120);
+      this.onNewCameraFrame(generateMinimalFrame());
+    }, 200);
   }
 
   private onNewCameraFrame(frame: Buffer): void {

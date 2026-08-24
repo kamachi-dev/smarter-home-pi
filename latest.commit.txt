@@ -1,6 +1,6 @@
-feat(camera): render high-definition security camera foyer scene in fallback frame stream
+feat(camera): add auto-scanning across video nodes and detailed hardware diagnostics
 
-- Replace flat gray fallback generator with animated high-definition security camera foyer scene
-- Render smart entrance doorway, overhead spotlight cone, wooden perspective flooring, and scanlines directly in JPEG buffer
-- Dynamically render moving occupant silhouette upon neural face detection
-- Ensure continuous live video motion and clock updates across physical and virtual environments
+- Implement physical /dev/video* device scanning and auto-discovery
+- Add sequential hardware probing across rpicam-vid, libcamera-vid, and ffmpeg v4l2 device nodes
+- Capture and log camera stderr diagnostics to identify exact hardware detection state
+- Revert standby frame generator to clean minimal buffer
