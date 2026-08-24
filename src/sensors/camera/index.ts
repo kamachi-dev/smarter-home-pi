@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import EventEmitter from 'events';
 import fs from 'fs';
+import jpeg from 'jpeg-js';
 import { BaseSensor } from '../base.js';
 import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/index.js';
 import { FaceRecognitionEngine } from './faceRecognition.js';
@@ -131,24 +132,34 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Generates lightweight fallback frames if hardware camera is temporarily detached
+   * Generates standard 640x480 JPEG frames if physical camera hardware is in initialization
    */
   private startSimulatedFrameGenerator(): void {
-    // Generate simulated camera frame buffer
-    const generateMinimalJpeg = (): Buffer => {
-      // 1x1 base JPEG frame
-      return Buffer.from([
-        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
-        0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
-        0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
-        0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20,
-        0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27,
-        0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
-        0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
-        0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
-        0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f,
-        0x00, 0xbf, 0x00, 0xff, 0xd9
-      ]);
+    const width = 640;
+    const height = 480;
+    let tick = 0;
+
+    const generateFrame = (): Buffer => {
+      tick += 0.05;
+      const frameData = Buffer.alloc(width * height * 4);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          // Gradient foyer background
+          const r = Math.min(60, Math.floor(25 + (y / height) * 20));
+          const g = Math.min(65, Math.floor(28 + (y / height) * 20));
+          const b = Math.min(75, Math.floor(32 + (y / height) * 25));
+
+          frameData[idx] = r;
+          frameData[idx + 1] = g;
+          frameData[idx + 2] = b;
+          frameData[idx + 3] = 255;
+        }
+      }
+
+      const encoded = jpeg.encode({ data: frameData, width, height }, 60);
+      return encoded.data;
     };
 
     const interval = setInterval(() => {
@@ -156,8 +167,8 @@ export class CameraSensor extends BaseSensor {
         clearInterval(interval);
         return;
       }
-      this.onNewCameraFrame(generateMinimalJpeg());
-    }, 200);
+      this.onNewCameraFrame(generateFrame());
+    }, 150);
   }
 
   private onNewCameraFrame(frame: Buffer): void {

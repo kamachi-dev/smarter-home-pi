@@ -27,17 +27,31 @@ export class SensorRegistry extends EventEmitter {
 
   private loadSavedConfig(): void {
     try {
+      let configs: SensorConfig[] = [];
       if (fs.existsSync(config.configFilePath)) {
-        const raw = fs.readFileSync(config.configFilePath, 'utf8');
-        const configs: SensorConfig[] = JSON.parse(raw);
+        try {
+          const raw = fs.readFileSync(config.configFilePath, 'utf8');
+          configs = JSON.parse(raw);
+        } catch {}
+      }
+
+      if (Array.isArray(configs) && configs.length > 0) {
         console.log(`[SensorRegistry] Restoring ${configs.length} saved sensor configuration(s)`);
         for (const cfg of configs) {
           this.registerSensor(cfg, false);
         }
       } else {
         // Initial default configuration: Temperature on Pin 7 (GPIO 4) and Camera (CSI/USB)
-        console.log('[SensorRegistry] Initializing default sensor configuration');
+        console.log('[SensorRegistry] Initializing default hardware sensors (Camera + Temperature)');
         const defaultConfigs: SensorConfig[] = [
+          {
+            id: 'sensor-cam-1',
+            name: 'Entrance Security Camera (Face ID)',
+            type: 'camera',
+            pollIntervalMs: 2000,
+            enabled: true,
+            options: { resolution: '640x480' }
+          },
           {
             id: 'sensor-temp-1',
             name: 'Living Room Temperature & Humidity',
@@ -47,14 +61,6 @@ export class SensorRegistry extends EventEmitter {
             pollIntervalMs: 2500,
             enabled: true,
             options: { model: 'DHT22' }
-          },
-          {
-            id: 'sensor-cam-1',
-            name: 'Entrance Security Camera (Face ID)',
-            type: 'camera',
-            pollIntervalMs: 2000,
-            enabled: true,
-            options: { resolution: '640x480' }
           }
         ];
         for (const cfg of defaultConfigs) {

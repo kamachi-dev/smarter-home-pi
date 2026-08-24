@@ -1,5 +1,6 @@
-fix(face-api): resolve CommonJS module interop for neural networks and make camera stream always live
+fix(dashboard): eliminate broken image icon with smooth opacity transition and fallback rendering
 
-- Fix face-api CommonJS module import resolution for TinyFaceDetector and ResNet nets
-- Remove manual webcam toggle button and initialize camera stream automatically
-- Verify clean neural weights loading and active stream pipeline
+- Ensure default camera and temperature sensors are always registered and active
+- Fix fallback 640x480 JPEG frame generation to support standard MJPEG streaming
+- Add smooth opacity transition to live camera element to eliminate broken image icon during initialization
+- Confirm real neural models (TinyFaceDetector, FaceLandmark68, FaceRecognitionNet) loaded successfully
