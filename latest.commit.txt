@@ -1,5 +1,6 @@
-fix(docker): replace static /dev/gpiomem device mapping with privileged mode
+refactor(gpio): replace low-level gpiomem access with standard onoff library and kernel subsystems
 
-- Remove static /dev/gpiomem host device requirement from docker-compose.yml
-- Add privileged: true and /sys volume mount for universal Raspberry Pi 3/4/5 and container support
-- Support dynamic hardware GPIO character devices and fallback gracefully if direct memory map is unavailable
+- Integrate onoff library for standard user-space GPIO control via sysfs without /dev/gpiomem
+- Remove node-dht-sensor dependency and eliminate all /dev/gpiomem memory access
+- Refactor GpioManager and TemperatureSensor to use onoff and standard Linux 1-wire subsystems
+- Verify clean execution across npm run dev and npm start

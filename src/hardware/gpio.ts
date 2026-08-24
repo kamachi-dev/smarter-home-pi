@@ -1,17 +1,15 @@
-import fs from 'fs';
-import path from 'path';
+import { Gpio } from 'onoff';
 import { config } from '../config/env.js';
 
 export class GpioManager {
   private static instance: GpioManager;
-  private isLinux: boolean;
-  private sysfsGpioPath = '/sys/class/gpio';
-  private exportedPins: Set<number> = new Set();
+  private isAccessible: boolean;
+  private activePins: Map<number, Gpio> = new Map();
   private simulatedPinStates: Map<number, { direction: 'in' | 'out'; value: number }> = new Map();
 
   private constructor() {
-    this.isLinux = process.platform === 'linux' && !config.isSimulatedHardware;
-    console.log(`[GpioManager] Initialized in ${this.isLinux ? 'NATIVE RASPBERRY PI HARDWARE' : 'SIMULATION/EMULATED'} mode`);
+    this.isAccessible = Gpio.accessible && !config.isSimulatedHardware;
+    console.log(`[GpioManager] Initialized using onoff standard GPIO library in ${this.isAccessible ? 'NATIVE RASPBERRY PI HARDWARE' : 'SIMULATION/EMULATED'} mode (no gpiomem dependency)`);
   }
 
   public static getInstance(): GpioManager {
@@ -22,44 +20,43 @@ export class GpioManager {
   }
 
   public isHardwareMode(): boolean {
-    return this.isLinux;
+    return this.isAccessible;
   }
 
   public exportPin(bcmGpio: number, direction: 'in' | 'out' = 'in'): boolean {
-    if (!this.isLinux) {
+    if (!this.isAccessible) {
       this.simulatedPinStates.set(bcmGpio, { direction, value: 0 });
-      this.exportedPins.add(bcmGpio);
       return true;
     }
 
     try {
-      const pinPath = path.join(this.sysfsGpioPath, `gpio${bcmGpio}`);
-      if (!fs.existsSync(pinPath)) {
-        fs.writeFileSync(path.join(this.sysfsGpioPath, 'export'), bcmGpio.toString());
+      if (this.activePins.has(bcmGpio)) {
+        const existing = this.activePins.get(bcmGpio)!;
+        existing.setDirection(direction);
+        return true;
       }
-      // Wait briefly for sysfs permissions / creation
-      fs.writeFileSync(path.join(pinPath, 'direction'), direction);
-      this.exportedPins.add(bcmGpio);
+
+      const pin = new Gpio(bcmGpio, direction);
+      this.activePins.set(bcmGpio, pin);
       return true;
     } catch (err) {
-      console.warn(`[GpioManager] Could not export GPIO ${bcmGpio} via sysfs (falling back to virtual pin):`, (err as Error).message);
+      console.warn(`[GpioManager] Could not open GPIO ${bcmGpio} via onoff (falling back to virtual pin):`, (err as Error).message);
       this.simulatedPinStates.set(bcmGpio, { direction, value: 0 });
-      this.exportedPins.add(bcmGpio);
       return false;
     }
   }
 
   public unexportPin(bcmGpio: number): boolean {
-    this.exportedPins.delete(bcmGpio);
-    if (!this.isLinux) {
+    if (!this.isAccessible) {
       this.simulatedPinStates.delete(bcmGpio);
       return true;
     }
 
     try {
-      const pinPath = path.join(this.sysfsGpioPath, `gpio${bcmGpio}`);
-      if (fs.existsSync(pinPath)) {
-        fs.writeFileSync(path.join(this.sysfsGpioPath, 'unexport'), bcmGpio.toString());
+      const pin = this.activePins.get(bcmGpio);
+      if (pin) {
+        pin.unexport();
+        this.activePins.delete(bcmGpio);
       }
       return true;
     } catch (err) {
@@ -68,16 +65,15 @@ export class GpioManager {
   }
 
   public readPin(bcmGpio: number): number {
-    if (!this.isLinux) {
+    if (!this.isAccessible) {
       const state = this.simulatedPinStates.get(bcmGpio);
       return state ? state.value : 0;
     }
 
     try {
-      const valuePath = path.join(this.sysfsGpioPath, `gpio${bcmGpio}`, 'value');
-      if (fs.existsSync(valuePath)) {
-        const valStr = fs.readFileSync(valuePath, 'utf8').trim();
-        return parseInt(valStr, 10) || 0;
+      const pin = this.activePins.get(bcmGpio);
+      if (pin) {
+        return pin.readSync();
       }
     } catch (err) {
       // fallback
@@ -86,7 +82,7 @@ export class GpioManager {
   }
 
   public writePin(bcmGpio: number, value: 0 | 1): boolean {
-    if (!this.isLinux) {
+    if (!this.isAccessible) {
       const state = this.simulatedPinStates.get(bcmGpio) || { direction: 'out', value: 0 };
       state.value = value;
       this.simulatedPinStates.set(bcmGpio, state);
@@ -94,9 +90,9 @@ export class GpioManager {
     }
 
     try {
-      const valuePath = path.join(this.sysfsGpioPath, `gpio${bcmGpio}`, 'value');
-      if (fs.existsSync(valuePath)) {
-        fs.writeFileSync(valuePath, value.toString());
+      const pin = this.activePins.get(bcmGpio);
+      if (pin) {
+        pin.writeSync(value);
         return true;
       }
     } catch (err) {
@@ -105,10 +101,27 @@ export class GpioManager {
     return false;
   }
 
-  public cleanupAll(): void {
-    for (const pin of Array.from(this.exportedPins)) {
-      this.unexportPin(pin);
+  public watchPin(bcmGpio: number, callback: (err: Error | null | undefined, value: number) => void): boolean {
+    if (!this.isAccessible) return false;
+
+    try {
+      const pin = this.activePins.get(bcmGpio);
+      if (pin) {
+        pin.watch(callback);
+        return true;
+      }
+    } catch (err) {
+      console.error(`[GpioManager] Watch error on GPIO ${bcmGpio}:`, (err as Error).message);
     }
-    this.exportedPins.clear();
+    return false;
+  }
+
+  public cleanupAll(): void {
+    for (const [_, pin] of this.activePins) {
+      try {
+        pin.unexport();
+      } catch {}
+    }
+    this.activePins.clear();
   }
 }
