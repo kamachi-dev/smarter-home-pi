@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  smarter-home-pi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smarter-home-pi
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - HOST=0.0.0.0
+      - API_URL=http://host.docker.internal:3000
+      - SMARTER_HOME_API_KEY=pi-secret-key-default
+      - SYNC_INTERVAL_MS=3000
+    volumes:
+      - ./data:/app/data
+    # Raspberry Pi hardware device pass-through
+    # privileged: true (uncomment when running on real RPi for direct GPIO access)
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/video0:/dev/video0
+    # Allow communication to host machine for smarter-home Next.js dev server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
