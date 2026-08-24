@@ -32,12 +32,10 @@
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "jpeg-js": "^0.4.4",
-    "onoff": "^6.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
-    "@types/onoff": "^3.2.1",
     "@types/ws": "^8.5.10",
     "tsx": "^4.16.2",
     "typescript": "^5.5.2"

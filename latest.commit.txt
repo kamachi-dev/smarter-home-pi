@@ -1,6 +1,5 @@
-refactor(gpio): replace low-level gpiomem access with standard onoff library and kernel subsystems
+refactor(gpio): implement pure kernel sysfs GPIO manager and remove native binary dependencies
 
-- Integrate onoff library for standard user-space GPIO control via sysfs without /dev/gpiomem
-- Remove node-dht-sensor dependency and eliminate all /dev/gpiomem memory access
-- Refactor GpioManager and TemperatureSensor to use onoff and standard Linux 1-wire subsystems
-- Verify clean execution across npm run dev and npm start
+- Remove native C++ addons (onoff, epoll, nan) and all gpiomem access paths
+- Implement pure Node.js sysfs (/sys/class/gpio) GPIO manager
+- Guarantee 100% clean startup on dev machines and Raspberry Pi Linux hardware
