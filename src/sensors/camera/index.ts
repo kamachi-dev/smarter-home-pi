@@ -160,7 +160,7 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Generates standard 640x480 JPEG frames
+   * Generates standard 640x480 JPEG frames with rich CCTV scene, doorway, lighting, and ambient animation
    */
   private startSimulatedFrameGenerator(): void {
     if (this.simulationInterval) return;
@@ -169,15 +169,73 @@ export class CameraSensor extends BaseSensor {
     let tick = 0;
 
     const generateFrame = (): Buffer => {
-      tick += 0.05;
+      tick += 0.08;
       const frameData = Buffer.alloc(width * height * 4);
+      const isPersonInView = this.currentDetection && this.currentDetection.detected;
+      const personX = Math.floor(width / 2 + Math.sin(tick) * 15);
+      const personY = 160;
 
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
-          const r = Math.min(60, Math.floor(25 + (y / height) * 20));
-          const g = Math.min(65, Math.floor(28 + (y / height) * 20));
-          const b = Math.min(75, Math.floor(32 + (y / height) * 25));
+
+          // 1. Base Wall & Ceiling Gradient
+          let r = Math.floor(30 + (y / height) * 25);
+          let g = Math.floor(32 + (y / height) * 22);
+          let b = Math.floor(38 + (y / height) * 20);
+
+          // 2. Ceiling Light Cone
+          const dxLight = x - width / 2;
+          const distLight = Math.sqrt(dxLight * dxLight + (y - 30) * (y - 30));
+          if (distLight < 260) {
+            const intensity = (1 - distLight / 260) * 0.45;
+            r = Math.min(255, Math.floor(r + 250 * intensity));
+            g = Math.min(255, Math.floor(g + 220 * intensity));
+            b = Math.min(255, Math.floor(b + 140 * intensity));
+          }
+
+          // 3. Entrance Doorway (Centered: X 230 to 410, Y 80 to 360)
+          if (x >= 230 && x <= 410 && y >= 80 && y <= 360) {
+            if (x === 230 || x === 410 || y === 80 || y === 360) {
+              r = 120; g = 110; b = 100; // Door frame
+            } else {
+              r = Math.floor(20 + (y / 360) * 15);
+              g = Math.floor(18 + (y / 360) * 15);
+              b = Math.floor(16 + (y / 360) * 15);
+            }
+          }
+
+          // 4. Parquet Flooring Perspective (Y > 360)
+          if (y > 360) {
+            const plank = Math.floor((x + (y - 360) * 0.8) / 45) % 2;
+            const woodR = plank ? 55 : 45;
+            const woodG = plank ? 40 : 32;
+            const woodB = plank ? 30 : 25;
+            r = woodR; g = woodG; b = woodB;
+          }
+
+          // 5. Render Person Silhouette when in view
+          if (isPersonInView) {
+            // Head (circle radius 35)
+            const dxHead = x - personX;
+            const dyHead = y - (personY + 30);
+            if (dxHead * dxHead + dyHead * dyHead < 35 * 35) {
+              r = 240; g = 205; b = 175; // Skin tone
+            }
+            // Torso (ellipse)
+            const dxBody = (x - personX) / 55;
+            const dyBody = (y - (personY + 120)) / 65;
+            if (dxBody * dxBody + dyBody * dyBody < 1 && y >= personY + 50 && y <= personY + 180) {
+              r = 30; g = 45; b = 65; // Dark jacket
+            }
+          }
+
+          // 6. Security CCTV Scanlines
+          if (y % 4 === 0) {
+            r = Math.floor(r * 0.82);
+            g = Math.floor(g * 0.82);
+            b = Math.floor(b * 0.82);
+          }
 
           frameData[idx] = r;
           frameData[idx + 1] = g;
@@ -186,7 +244,7 @@ export class CameraSensor extends BaseSensor {
         }
       }
 
-      const encoded = jpeg.encode({ data: frameData, width, height }, 60);
+      const encoded = jpeg.encode({ data: frameData, width, height }, 65);
       return encoded.data;
     };
 
@@ -196,7 +254,7 @@ export class CameraSensor extends BaseSensor {
         return;
       }
       this.onNewCameraFrame(generateFrame());
-    }, 150);
+    }, 120);
   }
 
   private onNewCameraFrame(frame: Buffer): void {

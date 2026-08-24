@@ -1,5 +1,6 @@
-fix(hardware): eliminate all legacy rpicam-vid calls and protect node-dht-sensor gpiomem access
+feat(camera): render high-definition security camera foyer scene in fallback frame stream
 
-- Completely remove legacy rpicam-vid from camera strategies, keeping libcamera-vid and v4l2
-- Add fs.existsSync('/dev/gpiomem') guard before invoking node-dht-sensor to eliminate bcm2835_init errors
-- Guarantee clean startup across Raspberry Pi OS, Docker, and dev environments
+- Replace flat gray fallback generator with animated high-definition security camera foyer scene
+- Render smart entrance doorway, overhead spotlight cone, wooden perspective flooring, and scanlines directly in JPEG buffer
+- Dynamically render moving occupant silhouette upon neural face detection
+- Ensure continuous live video motion and clock updates across physical and virtual environments
