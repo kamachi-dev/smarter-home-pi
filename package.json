@@ -39,5 +39,9 @@
     "@types/ws": "^8.5.10",
     "tsx": "^4.16.2",
     "typescript": "^5.5.2"
+  },
+  "optionalDependencies": {
+    "ds18b20-raspi": "^0.3.6",
+    "node-dht-sensor": "^0.5.4"
   }
 }

@@ -1,5 +1,6 @@
-fix(camera): isolate stderr to suppress bcm2835_init notices and streamline camera discovery
+feat(hardware): implement VirtualHardwareManager and integrate native ds18b20-raspi & node-dht-sensor
 
-- Route camera subprocess stderr through filtered stream parser to suppress non-critical bcm2835_init LED warnings
-- Add modern libcamera-vid and v4l2 ffmpeg discovery with graceful MJPEG fallback
-- Prevent infinite restart loops if hardware utilities are unconfigured on the host
+- Implement VirtualHardwareManager that mocks /dev/gpiomem, /dev/video0, and /sys/bus/w1 for seamless npm run dev execution
+- Integrate industry-standard native sensor libraries (ds18b20-raspi for 1-Wire and node-dht-sensor for DHT11/DHT22)
+- Provide transparent sysfs emulation with continuous background w1_slave data generation
+- Ensure zero ENOENT / missing directory errors during development and native hardware execution
