@@ -25,9 +25,13 @@
     "@fastify/static": "^7.0.4",
     "@fastify/websocket": "^10.0.1",
     "@supabase/supabase-js": "^2.112.4",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
     "@vladmandic/face-api": "^1.7.12",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
+    "jpeg-js": "^0.4.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -35,5 +39,8 @@
     "@types/ws": "^8.5.10",
     "tsx": "^4.16.2",
     "typescript": "^5.5.2"
+  },
+  "optionalDependencies": {
+    "node-dht-sensor": "^0.5.4"
   }
 }

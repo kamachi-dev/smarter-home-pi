@@ -1,17 +1,19 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn, ChildProcess } from 'child_process';
+import EventEmitter from 'events';
 import fs from 'fs';
 import { BaseSensor } from '../base.js';
 import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/index.js';
 import { FaceRecognitionEngine } from './faceRecognition.js';
 import { GpioManager } from '../../hardware/gpio.js';
 
-const execAsync = promisify(exec);
-
 export class CameraSensor extends BaseSensor {
   private faceEngine: FaceRecognitionEngine;
-  private isProcessing: boolean = false;
-  private recognitionLoopTimer: NodeJS.Timeout | null = null;
+  private cameraProcess: ChildProcess | null = null;
+  private latestFrame: Buffer | null = null;
+  private isProcessingFace: boolean = false;
+  private recognitionTimer: NodeJS.Timeout | null = null;
+  private streamListeners: Set<(frame: Buffer) => void> = new Set();
+  
   private currentDetection: FaceDetectionPayload = {
     detected: false,
     status: 'none',
@@ -26,65 +28,180 @@ export class CameraSensor extends BaseSensor {
   }
 
   public async init(): Promise<void> {
-    console.log(`[CameraSensor] Initialized camera sensor [${this.config.name}] (Hardware/CSI/USB enabled)`);
+    console.log(`[CameraSensor] Initializing Raspberry Pi Camera Module (${this.config.name})...`);
+    this.startHardwareCameraCapture();
   }
 
   public override start(): void {
     super.start();
-    this.startFaceRecognitionLoop();
+    this.startFaceRecognitionPipeline();
   }
 
   public override stop(): void {
     super.stop();
-    if (this.recognitionLoopTimer) {
-      clearInterval(this.recognitionLoopTimer);
-      this.recognitionLoopTimer = null;
+    if (this.recognitionTimer) {
+      clearInterval(this.recognitionTimer);
+      this.recognitionTimer = null;
+    }
+    if (this.cameraProcess) {
+      try {
+        this.cameraProcess.kill('SIGTERM');
+      } catch {}
+      this.cameraProcess = null;
     }
   }
 
   /**
-   * Continuous background loop executing facial recognition indefinitely alongside Pi
+   * Spawns real Raspberry Pi Camera (libcamera / rpicam-vid) or USB camera (ffmpeg/v4l2)
    */
-  private startFaceRecognitionLoop(): void {
-    if (this.recognitionLoopTimer) return;
-
-    // Run recognition check every 1.5 seconds
-    this.recognitionLoopTimer = setInterval(async () => {
-      if (!this.isRunning || this.isProcessing) return;
-      this.isProcessing = true;
-
-      try {
-        const frameBuffer = await this.captureFrameBuffer();
-        const detection = await this.faceEngine.recognizeFrame(frameBuffer);
-        this.currentDetection = detection;
-
-        // Emit detection event for sync engine & WebSocket subscribers
-        this.emit('face_detection', detection);
-      } catch (err) {
-        console.error('[CameraSensor] Recognition loop iteration error:', (err as Error).message);
-      } finally {
-        this.isProcessing = false;
-      }
-    }, Math.max(1000, this.config.pollIntervalMs || 2000));
-  }
-
-  private async captureFrameBuffer(): Promise<Buffer | undefined> {
+  private startHardwareCameraCapture(): void {
     const isLinux = GpioManager.getInstance().isHardwareMode();
 
     if (isLinux) {
+      // 1. Try Raspberry Pi Camera Module (CSI) via rpicam-vid / libcamera-vid
+      const rpiCmd = 'rpicam-vid';
+      const rpiArgs = ['-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-'];
+
       try {
-        // Attempt RPi libcamera / rpicam-still snapshot to temp file or stdout
-        const tempPath = '/tmp/pi_cam_frame.jpg';
-        await execAsync(`rpicam-still -t 100 --width 640 --height 480 -n -o ${tempPath} || libcamera-still -t 100 --width 640 --height 480 -n -o ${tempPath} || fswebcam -r 640x480 --no-banner ${tempPath}`);
-        if (fs.existsSync(tempPath)) {
-          const buf = fs.readFileSync(tempPath);
-          return buf;
-        }
-      } catch (err) {
-        // fallback to synthetic frame
+        console.log('[CameraSensor] Spawning Raspberry Pi CSI Camera:', rpiCmd, rpiArgs.join(' '));
+        this.cameraProcess = spawn(rpiCmd, rpiArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
+        this.attachMjpegStreamParser(this.cameraProcess);
+
+        this.cameraProcess.on('error', (err) => {
+          console.warn('[CameraSensor] rpicam-vid error, trying v4l2 USB camera fallback:', err.message);
+          this.startV4L2Fallback();
+        });
+      } catch {
+        this.startV4L2Fallback();
       }
+    } else {
+      console.log('[CameraSensor] Non-Linux environment detected, starting simulated CCTV frame generator');
+      this.startSimulatedFrameGenerator();
     }
-    return undefined;
+  }
+
+  private startV4L2Fallback(): void {
+    try {
+      console.log('[CameraSensor] Spawning ffmpeg /dev/video0 capture...');
+      const args = ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-'];
+      this.cameraProcess = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+      this.attachMjpegStreamParser(this.cameraProcess);
+
+      this.cameraProcess.on('error', () => {
+        console.warn('[CameraSensor] /dev/video0 not accessible, starting simulated frame stream');
+        this.startSimulatedFrameGenerator();
+      });
+    } catch {
+      this.startSimulatedFrameGenerator();
+    }
+  }
+
+  /**
+   * Parses incoming MJPEG stream chunks from camera stdout by finding JPEG SOI (0xFF 0xD8) and EOI (0xFF 0xD9) markers
+   */
+  private attachMjpegStreamParser(proc: ChildProcess): void {
+    if (!proc.stdout) return;
+    let buffer = Buffer.alloc(0);
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffer = Buffer.concat([buffer, chunk]);
+
+      let startIndex = 0;
+      while (true) {
+        const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]), startIndex);
+        if (soi === -1) break;
+
+        const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), soi + 2);
+        if (eoi === -1) break;
+
+        const jpegFrame = buffer.subarray(soi, eoi + 2);
+        this.onNewCameraFrame(jpegFrame);
+
+        buffer = buffer.subarray(eoi + 2);
+        startIndex = 0;
+      }
+    });
+
+    proc.on('close', () => {
+      console.warn('[CameraSensor] Camera process closed. Attempting restart in 3s...');
+      setTimeout(() => {
+        if (this.isRunning) this.startHardwareCameraCapture();
+      }, 3000);
+    });
+  }
+
+  /**
+   * Generates lightweight fallback frames if hardware camera is temporarily detached
+   */
+  private startSimulatedFrameGenerator(): void {
+    // Generate simulated camera frame buffer
+    const generateMinimalJpeg = (): Buffer => {
+      // 1x1 base JPEG frame
+      return Buffer.from([
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
+        0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+        0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+        0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20,
+        0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27,
+        0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+        0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
+        0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
+        0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f,
+        0x00, 0xbf, 0x00, 0xff, 0xd9
+      ]);
+    };
+
+    const interval = setInterval(() => {
+      if (!this.isRunning) {
+        clearInterval(interval);
+        return;
+      }
+      this.onNewCameraFrame(generateMinimalJpeg());
+    }, 200);
+  }
+
+  private onNewCameraFrame(frame: Buffer): void {
+    this.latestFrame = frame;
+    this.emit('frame', frame);
+
+    for (const listener of Array.from(this.streamListeners)) {
+      try {
+        listener(frame);
+      } catch {}
+    }
+  }
+
+  /**
+   * Continuous background AI facial recognition loop analyzing real camera frames
+   */
+  private startFaceRecognitionPipeline(): void {
+    if (this.recognitionTimer) return;
+
+    this.recognitionTimer = setInterval(async () => {
+      if (!this.isRunning || this.isProcessingFace) return;
+      this.isProcessingFace = true;
+
+      try {
+        const detection = await this.faceEngine.recognizeFrame(this.latestFrame || undefined);
+        this.currentDetection = detection;
+        this.emit('face_detection', detection);
+      } catch (err) {
+        console.error('[CameraSensor] Face recognition error:', (err as Error).message);
+      } finally {
+        this.isProcessingFace = false;
+      }
+    }, 1200);
+  }
+
+  public getLatestFrame(): Buffer | null {
+    return this.latestFrame;
+  }
+
+  public subscribeStream(listener: (frame: Buffer) => void): () => void {
+    this.streamListeners.add(listener);
+    return () => {
+      this.streamListeners.delete(listener);
+    };
   }
 
   public async read(): Promise<CameraReading> {
@@ -94,6 +211,7 @@ export class CameraSensor extends BaseSensor {
       timestamp: new Date().toISOString(),
       status: 'ok',
       faceDetection: this.currentDetection,
+      snapshotBase64: this.latestFrame ? this.latestFrame.toString('base64') : undefined
     };
 
     this.lastReading = reading;

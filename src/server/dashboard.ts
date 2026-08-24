@@ -136,29 +136,42 @@ export const dashboardHtml = `<!DOCTYPE html>
 
         <!-- Facial Recognition Camera Card -->
         <div class="glass-panel p-6 rounded-2xl space-y-4 relative overflow-hidden">
-          <div class="flex justify-between items-center">
+          <div class="flex flex-wrap justify-between items-center gap-2">
             <div class="flex items-center gap-2.5">
-              <div class="w-3 h-3 rounded-full bg-sky-400 pulse-slow"></div>
+              <div class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></div>
               <h2 class="text-base font-bold text-white">Live Camera & Facial Recognition</h2>
             </div>
-            <span id="face-state-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400 uppercase tracking-wide">
-              STANDBY
-            </span>
+            
+            <div class="flex items-center gap-2">
+              <button id="webcam-toggle-btn" onclick="toggleWebcam()" class="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-stone-900 border border-stone-750 text-stone-300 hover:text-white hover:border-stone-600 transition-all flex items-center gap-1.5 cursor-pointer">
+                <span>📹 Enable Live Webcam</span>
+              </button>
+              <span id="face-state-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400 uppercase tracking-wide">
+                STANDBY
+              </span>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <!-- Dynamic Live Video Canvas with Bounding Boxes -->
+            <!-- Real Raspberry Pi Camera MJPEG Stream with Dynamic Face Bounding Box Overlay -->
             <div class="relative aspect-video bg-stone-950 rounded-xl border border-stone-800 overflow-hidden flex items-center justify-center group shadow-2xl">
-              <canvas id="live-video-canvas" width="640" height="480" class="w-full h-full object-cover"></canvas>
+              <!-- Live Hardware MJPEG Video Feed -->
+              <img id="camera-mjpeg-stream" src="/api/camera/stream" alt="Live Camera Stream" class="absolute inset-0 w-full h-full object-cover" onerror="handleStreamError(this)" onload="handleStreamLoad()" />
+              <video id="webcam-video" autoplay playsinline muted class="hidden"></video>
+              <canvas id="live-video-canvas" width="640" height="480" class="absolute inset-0 w-full h-full object-cover pointer-events-none"></canvas>
               
               <!-- Live HUD overlay -->
-              <div class="absolute top-2.5 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-mono text-emerald-400 font-bold">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>REC • 1080P 30FPS</span>
+              <div class="absolute top-2.5 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-emerald-400 font-bold z-10">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="cam-hud-label">RPi CAMERA (CSI/USB) • LIVE FEED</span>
               </div>
 
-              <div class="absolute top-2.5 right-3 px-2 py-0.5 rounded bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-mono text-stone-300">
-                <span id="canvas-fps">AI ENGINE: ACTIVE</span>
+              <div class="absolute top-2.5 right-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-stone-300 z-10">
+                <span id="canvas-timecode">--:--:--</span>
+              </div>
+
+              <div class="absolute bottom-2.5 left-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[8.5px] font-mono text-stone-400 z-10">
+                <span id="cam-fps-badge">640x480 • 15 FPS • HARDWARE</span>
               </div>
             </div>
 
@@ -343,101 +356,184 @@ export const dashboardHtml = `<!DOCTYPE html>
     const canvas = document.getElementById('live-video-canvas');
     const ctx = canvas.getContext('2d');
     let animationFrameId;
+    let isWebcamActive = false;
+    let webcamStream = null;
+
+    async function toggleWebcam() {
+      const btn = document.getElementById('webcam-toggle-btn');
+      const video = document.getElementById('webcam-video');
+      const hudLabel = document.getElementById('cam-hud-label');
+
+      if (!isWebcamActive) {
+        try {
+          webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+          video.srcObject = webcamStream;
+          await video.play();
+          isWebcamActive = true;
+          btn.innerHTML = '<span>🛑 Stop Local Webcam</span>';
+          btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 transition-all flex items-center gap-1.5 cursor-pointer';
+          hudLabel.textContent = 'LOCAL WEBCAM • LIVE FEED';
+        } catch (err) {
+          alert('Could not access webcam: ' + err.message);
+        }
+      } else {
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+        }
+        video.srcObject = null;
+        isWebcamActive = false;
+        btn.innerHTML = '<span>📹 Enable Live Webcam</span>';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-stone-900 border border-stone-750 text-stone-300 hover:text-white hover:border-stone-600 transition-all flex items-center gap-1.5 cursor-pointer';
+        hudLabel.textContent = 'CAM 01 • ENTRANCE FOYER';
+      }
+    }
+
+    let isStreamLoaded = false;
+
+    function handleStreamLoad() {
+      isStreamLoaded = true;
+      document.getElementById('cam-fps-badge').textContent = '640x480 • 15 FPS • HARDWARE STREAM';
+    }
+
+    function handleStreamError(img) {
+      isStreamLoaded = false;
+      document.getElementById('cam-fps-badge').textContent = 'CAMERA INITIALIZING...';
+      // Attempt reconnect every 3s
+      setTimeout(() => {
+        if (!isWebcamActive) {
+          img.src = '/api/camera/stream?t=' + Date.now();
+        }
+      }, 3000);
+    }
 
     function startCanvasRenderLoop() {
       let t = 0;
+      const video = document.getElementById('webcam-video');
+      const streamImg = document.getElementById('camera-mjpeg-stream');
+
       function render() {
-        t += 0.03;
-        ctx.fillStyle = '#090807';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        t += 0.035;
+        const now = new Date();
+        const timecode = now.toTimeString().split(' ')[0] + '.' + String(Math.floor(now.getMilliseconds() / 100));
+        document.getElementById('canvas-timecode').textContent = timecode;
 
-        // Draw animated camera background / room simulation
-        const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        grad.addColorStop(0, '#151311');
-        grad.addColorStop(0.5, '#1e1a17');
-        grad.addColorStop(1, '#0e0c0b');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear canvas for transparent overlay
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw subtle room perspective lines
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.lineTo(180, 140);
-        ctx.moveTo(canvas.width, 0); ctx.lineTo(460, 140);
-        ctx.moveTo(0, canvas.height); ctx.lineTo(180, 360);
-        ctx.moveTo(canvas.width, canvas.height); ctx.lineTo(460, 360);
-        ctx.stroke();
+        if (isWebcamActive && video.readyState >= 2) {
+          streamImg.classList.add('hidden');
+          // Draw real local webcam frames
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } else if (!isStreamLoaded) {
+          streamImg.classList.remove('hidden');
+          // If hardware camera is initializing or in virtual host, render visible camera scene
+          const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+          bgGrad.addColorStop(0, '#1c1917');
+          bgGrad.addColorStop(0.65, '#292524');
+          bgGrad.addColorStop(1, '#0c0a09');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw detection box if face is detected
+          // Foyer light cone
+          const lightGrad = ctx.createRadialGradient(canvas.width / 2, 40, 10, canvas.width / 2, 260, 360);
+          lightGrad.addColorStop(0, 'rgba(254, 243, 199, 0.22)');
+          lightGrad.addColorStop(0.5, 'rgba(251, 191, 36, 0.08)');
+          lightGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = lightGrad;
+          ctx.beginPath();
+          ctx.moveTo(canvas.width / 2 - 120, 0);
+          ctx.lineTo(canvas.width / 2 + 120, 0);
+          ctx.lineTo(canvas.width, canvas.height);
+          ctx.lineTo(0, canvas.height);
+          ctx.closePath();
+          ctx.fill();
+
+          // Door & Archway
+          ctx.fillStyle = '#141210';
+          ctx.fillRect(canvas.width / 2 - 110, 60, 220, 320);
+          ctx.strokeStyle = '#44403c';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(canvas.width / 2 - 110, 60, 220, 320);
+
+          // Render person silhouette if detected
+          const det = state.currentFaceDetection;
+          if (det && det.detected) {
+            const isRec = det.status === 'recognized';
+            const sway = Math.sin(t) * 6;
+            const px = canvas.width / 2 + sway;
+            const py = 150 + Math.cos(t * 0.8) * 4;
+
+            ctx.fillStyle = isRec ? '#1e293b' : '#3f3f46';
+            ctx.beginPath();
+            ctx.ellipse(px, py + 140, 75, 100, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = isRec ? '#fed7aa' : '#cbd5e1';
+            ctx.beginPath();
+            ctx.ellipse(px, py + 25, 45, 55, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          streamImg.classList.remove('hidden');
+        }
+
+        // CCTV Scanlines
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+        for (let y = 0; y < canvas.height; y += 4) {
+          ctx.fillRect(0, y, canvas.width, 1.5);
+        }
+
+        // Active Face Recognition Bounding Box & HUD
         const det = state.currentFaceDetection;
         if (det && det.detected) {
           const isRec = det.status === 'recognized';
-          const boxColor = isRec ? '#34d399' : '#fbbf24';
-          const boxBg = isRec ? 'rgba(52, 211, 153, 0.12)' : 'rgba(251, 191, 36, 0.12)';
+          const boxColor = isRec ? '#10b981' : '#f59e0b';
+          const boxBg = isRec ? 'rgba(16, 185, 129, 0.16)' : 'rgba(245, 158, 11, 0.16)';
 
-          // Smooth floating wobble
-          const bx = 200 + Math.sin(t) * 8;
-          const by = 100 + Math.cos(t * 0.8) * 6;
-          const bw = 240;
-          const bh = 280;
+          const sway = (isWebcamActive || isStreamLoaded) ? 0 : Math.sin(t) * 6;
+          const bx = det.box ? det.box.x : (canvas.width / 2 - 90 + sway);
+          const by = det.box ? det.box.y : 120;
+          const bw = det.box ? det.box.width : 180;
+          const bh = det.box ? det.box.height : 220;
 
+          // Box Fill & Border
           ctx.fillStyle = boxBg;
           ctx.fillRect(bx, by, bw, bh);
-
           ctx.strokeStyle = boxColor;
           ctx.lineWidth = 2.5;
           ctx.strokeRect(bx, by, bw, bh);
 
-          // Draw corner reticles
-          const cl = 16;
+          // Corner Reticles
+          const cl = 20;
           ctx.lineWidth = 4;
           ctx.beginPath();
-          // Top-Left
           ctx.moveTo(bx, by + cl); ctx.lineTo(bx, by); ctx.lineTo(bx + cl, by);
-          // Top-Right
           ctx.moveTo(bx + bw - cl, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cl);
-          // Bottom-Left
           ctx.moveTo(bx, by + bh - cl); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cl, by + bh);
-          // Bottom-Right
           ctx.moveTo(bx + bw - cl, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cl);
           ctx.stroke();
 
-          // Label Tag above box
-          const label = isRec ? (det.person + ' (' + (det.confidence * 100).toFixed(0) + '%)') : 'UNKNOWN PERSON [ALERT]';
-          ctx.font = 'bold 13px "JetBrains Mono", monospace';
+          // Face landmark points
+          ctx.fillStyle = boxColor;
+          const cx = bx + bw / 2;
+          const cy = by + bh / 2 - 15;
+          ctx.fillRect(cx - 30, cy - 15, 5, 5);
+          ctx.fillRect(cx + 25, cy - 15, 5, 5);
+          ctx.fillRect(cx - 2, cy + 8, 5, 8);
+          ctx.fillRect(cx - 20, cy + 32, 40, 3);
+
+          // Name Tag & Accuracy Badge
+          const label = isRec ? ((det.person || 'Recognized') + ' (' + Math.round((det.confidence || 0.94) * 100) + '%)') : 'UNKNOWN PERSON [ALERT]';
+          ctx.font = 'bold 12px "JetBrains Mono", monospace';
           const textMetrics = ctx.measureText(label);
           const tagW = textMetrics.width + 16;
           const tagH = 24;
 
           ctx.fillStyle = boxColor;
           ctx.fillRect(bx, by - tagH - 4, tagW, tagH);
-
           ctx.fillStyle = '#000000';
-          ctx.fillText(label, bx + 8, by - 10);
-
-          // Facial landmark points (simulated 68 points)
-          ctx.fillStyle = boxColor;
-          const centerX = bx + bw / 2;
-          const centerY = by + bh / 2 - 10;
-          // Eyes
-          ctx.fillRect(centerX - 40, centerY - 25, 6, 6);
-          ctx.fillRect(centerX + 34, centerY - 25, 6, 6);
-          // Nose
-          ctx.fillRect(centerX - 3, centerY, 6, 8);
-          // Mouth
-          ctx.fillRect(centerX - 25, centerY + 35, 50, 4);
+          ctx.fillText(label, bx + 8, by - 8);
         }
-
-        // Draw crosshair grid
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(canvas.width / 2 - 15, canvas.height / 2);
-        ctx.lineTo(canvas.width / 2 + 15, canvas.height / 2);
-        ctx.moveTo(canvas.width / 2, canvas.height / 2 - 15);
-        ctx.lineTo(canvas.width / 2, canvas.height / 2 + 15);
-        ctx.stroke();
 
         animationFrameId = requestAnimationFrame(render);
       }

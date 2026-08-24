@@ -33,6 +33,53 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
+  // Live Camera MJPEG Video Stream (RPi Camera Module / USB)
+  server.get('/api/camera/stream', async (request, reply) => {
+    const camSensor = registry.getAllSensors().find(s => s.type === 'camera') as any;
+    if (!camSensor || typeof camSensor.subscribeStream !== 'function') {
+      return reply.code(404).send({ error: 'Camera module not initialized.' });
+    }
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=--frame',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Connection': 'close',
+      'Pragma': 'no-cache'
+    });
+
+    const unsubscribe = camSensor.subscribeStream((frame: Buffer) => {
+      if (reply.raw.writableEnded || reply.raw.destroyed) {
+        unsubscribe();
+        return;
+      }
+      try {
+        reply.raw.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
+        reply.raw.write(frame);
+        reply.raw.write('\r\n');
+      } catch {
+        unsubscribe();
+      }
+    });
+
+    request.raw.on('close', () => {
+      unsubscribe();
+    });
+  });
+
+  // Camera single frame snapshot
+  server.get('/api/camera/snapshot', async (request, reply) => {
+    const camSensor = registry.getAllSensors().find(s => s.type === 'camera') as any;
+    const frame: Buffer | null = camSensor && typeof camSensor.getLatestFrame === 'function'
+      ? camSensor.getLatestFrame()
+      : null;
+
+    if (!frame) {
+      return reply.code(503).send({ error: 'Camera frame not available yet.' });
+    }
+
+    reply.type('image/jpeg').send(frame);
+  });
+
   // Get all registered sensors
   server.get('/api/sensors', async () => {
     return {

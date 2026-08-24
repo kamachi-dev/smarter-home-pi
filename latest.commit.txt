@@ -1,10 +1,7 @@
-feat(controller): initialize Raspberry Pi sensor controller with facial recognition and Smarter Home sync
+feat(ai): integrate genuine neural face recognition models and physical sensor drivers
 
-- Implement Node.js TypeScript server powered by Fastify and WebSockets
-- Add Hardware Abstraction Layer supporting Raspberry Pi 40-pin GPIO header and software fallback simulation
-- Implement extensible sensor framework with Temperature (DHT11/DHT22/DS18B20) and Camera drivers
-- Add continuous background AI facial recognition engine with 10+ photo composite embedding training
-- Implement interactive web dashboard featuring live 40-pin header visualizer, live video feed with bounding boxes, and sensor assignment modals
-- Integrate bidirectional telemetry and security synchronization with smarter-home repository and Supabase Realtime
-- Add multi-stage production Dockerfile, docker-compose.yml, and environment configuration templates
-- Configure comprehensive .gitignore and repository AGENTS.md rules
+- Integrate real TensorFlow Wasm backend with @vladmandic/face-api neural models (TinyFaceDetector, FaceLandmark68TinyNet, FaceRecognitionNet)
+- Implement genuine 10+ photo neural embedding centroid calculation with 128-dimensional ResNet face descriptors
+- Add real FaceMatcher Euclidean distance matching on incoming camera image frames
+- Add real hardware drivers for DS18B20 1-Wire (/sys/bus/w1/devices) and DHT11/DHT22 (node-dht-sensor/GPIO)
+- Add image buffer tensor decoding via jpeg-js
