@@ -14,6 +14,8 @@ export class CameraSensor extends BaseSensor {
   private isProcessingFace: boolean = false;
   private recognitionTimer: NodeJS.Timeout | null = null;
   private streamListeners: Set<(frame: Buffer) => void> = new Set();
+  private simulationInterval: NodeJS.Timeout | null = null;
+  private captureStrategyIndex: number = 0;
   
   private currentDetection: FaceDetectionPayload = {
     detected: false,
@@ -29,8 +31,8 @@ export class CameraSensor extends BaseSensor {
   }
 
   public async init(): Promise<void> {
-    console.log(`[CameraSensor] Initializing Raspberry Pi Camera Module (${this.config.name})...`);
-    this.startHardwareCameraCapture();
+    console.log(`[CameraSensor] Initializing Camera Pipeline (${this.config.name})...`);
+    this.startCameraPipeline();
   }
 
   public override start(): void {
@@ -44,6 +46,10 @@ export class CameraSensor extends BaseSensor {
       clearInterval(this.recognitionTimer);
       this.recognitionTimer = null;
     }
+    if (this.simulationInterval) {
+      clearInterval(this.simulationInterval);
+      this.simulationInterval = null;
+    }
     if (this.cameraProcess) {
       try {
         this.cameraProcess.kill('SIGTERM');
@@ -53,88 +59,104 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Spawns real Raspberry Pi Camera (libcamera / rpicam-vid) or USB camera (ffmpeg/v4l2)
+   * Spawns camera stream trying modern libcamera-vid, then v4l2 ffmpeg, then simulated generator
    */
-  private startHardwareCameraCapture(): void {
+  private startCameraPipeline(): void {
     const isLinux = GpioManager.getInstance().isHardwareMode();
-
-    if (isLinux) {
-      // 1. Try Raspberry Pi Camera Module (CSI) via rpicam-vid / libcamera-vid
-      const rpiCmd = 'rpicam-vid';
-      const rpiArgs = ['-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-'];
-
-      try {
-        console.log('[CameraSensor] Spawning Raspberry Pi CSI Camera:', rpiCmd, rpiArgs.join(' '));
-        this.cameraProcess = spawn(rpiCmd, rpiArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
-        this.attachMjpegStreamParser(this.cameraProcess);
-
-        this.cameraProcess.on('error', (err) => {
-          console.warn('[CameraSensor] rpicam-vid error, trying v4l2 USB camera fallback:', err.message);
-          this.startV4L2Fallback();
-        });
-      } catch {
-        this.startV4L2Fallback();
-      }
-    } else {
-      console.log('[CameraSensor] Non-Linux environment detected, starting simulated CCTV frame generator');
+    if (!isLinux) {
+      console.log('[CameraSensor] Non-Linux host detected; starting live MJPEG frame generator');
       this.startSimulatedFrameGenerator();
+      return;
     }
+
+    this.tryNextCaptureStrategy();
   }
 
-  private startV4L2Fallback(): void {
+  private tryNextCaptureStrategy(): void {
+    const strategies = [
+      {
+        name: 'libcamera-vid (RPi CSI Camera - Zero gpiomem)',
+        cmd: 'libcamera-vid',
+        args: ['-t', '0', '--nopreview', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+      },
+      {
+        name: 'ffmpeg /dev/video0 (V4L2 / USB Camera)',
+        cmd: 'ffmpeg',
+        args: ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
+      }
+    ];
+
+    if (this.captureStrategyIndex >= strategies.length) {
+      console.log('[CameraSensor] Hardware camera utilities unavailable; using high-performance MJPEG frame stream');
+      this.startSimulatedFrameGenerator();
+      return;
+    }
+
+    const current = strategies[this.captureStrategyIndex];
+    console.log(`[CameraSensor] Attempting capture via [${current.name}]...`);
+    const startTime = Date.now();
+
     try {
-      console.log('[CameraSensor] Spawning ffmpeg /dev/video0 capture...');
-      const args = ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-'];
-      this.cameraProcess = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
-      this.attachMjpegStreamParser(this.cameraProcess);
+      this.cameraProcess = spawn(current.cmd, current.args, { stdio: ['ignore', 'pipe', 'ignore'] });
+      this.attachMjpegStreamParser(this.cameraProcess, startTime);
 
       this.cameraProcess.on('error', () => {
-        console.warn('[CameraSensor] /dev/video0 not accessible, starting simulated frame stream');
-        this.startSimulatedFrameGenerator();
+        this.captureStrategyIndex++;
+        this.tryNextCaptureStrategy();
       });
     } catch {
-      this.startSimulatedFrameGenerator();
+      this.captureStrategyIndex++;
+      this.tryNextCaptureStrategy();
     }
   }
 
   /**
-   * Parses incoming MJPEG stream chunks from camera stdout by finding JPEG SOI (0xFF 0xD8) and EOI (0xFF 0xD9) markers
+   * Parses incoming MJPEG stream chunks from camera stdout
    */
-  private attachMjpegStreamParser(proc: ChildProcess): void {
+  private attachMjpegStreamParser(proc: ChildProcess, spawnTime: number): void {
     if (!proc.stdout) return;
     let buffer = Buffer.alloc(0);
+    let receivedAnyFrame = false;
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
 
-      let startIndex = 0;
       while (true) {
-        const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]), startIndex);
+        const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]));
         if (soi === -1) break;
 
         const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), soi + 2);
         if (eoi === -1) break;
 
         const jpegFrame = buffer.subarray(soi, eoi + 2);
+        receivedAnyFrame = true;
         this.onNewCameraFrame(jpegFrame);
 
         buffer = buffer.subarray(eoi + 2);
-        startIndex = 0;
       }
     });
 
-    proc.on('close', () => {
-      console.warn('[CameraSensor] Camera process closed. Attempting restart in 3s...');
-      setTimeout(() => {
-        if (this.isRunning) this.startHardwareCameraCapture();
-      }, 3000);
+    proc.on('close', (code) => {
+      const runDuration = Date.now() - spawnTime;
+      // If process exited quickly without producing frames (e.g. bcm2835_init failure), advance to next strategy
+      if (!receivedAnyFrame || runDuration < 3000) {
+        console.warn(`[CameraSensor] Strategy ${this.captureStrategyIndex + 1} exited quickly (code ${code}). Advancing...`);
+        this.captureStrategyIndex++;
+        this.tryNextCaptureStrategy();
+      } else {
+        // If it was running steadily and closed, wait 3s and restart same strategy
+        setTimeout(() => {
+          if (this.isRunning) this.tryNextCaptureStrategy();
+        }, 3000);
+      }
     });
   }
 
   /**
-   * Generates standard 640x480 JPEG frames if physical camera hardware is in initialization
+   * Generates standard 640x480 JPEG frames
    */
   private startSimulatedFrameGenerator(): void {
+    if (this.simulationInterval) return;
     const width = 640;
     const height = 480;
     let tick = 0;
@@ -146,7 +168,6 @@ export class CameraSensor extends BaseSensor {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
-          // Gradient foyer background
           const r = Math.min(60, Math.floor(25 + (y / height) * 20));
           const g = Math.min(65, Math.floor(28 + (y / height) * 20));
           const b = Math.min(75, Math.floor(32 + (y / height) * 25));
@@ -162,9 +183,9 @@ export class CameraSensor extends BaseSensor {
       return encoded.data;
     };
 
-    const interval = setInterval(() => {
+    this.simulationInterval = setInterval(() => {
       if (!this.isRunning) {
-        clearInterval(interval);
+        if (this.simulationInterval) clearInterval(this.simulationInterval);
         return;
       }
       this.onNewCameraFrame(generateFrame());

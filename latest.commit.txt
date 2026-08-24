@@ -1,5 +1,5 @@
-refactor(gpio): implement pure kernel sysfs GPIO manager and remove native binary dependencies
+fix(camera): eliminate rpicam-vid bcm2835_init gpiomem dependency and restart loops
 
-- Remove native C++ addons (onoff, epoll, nan) and all gpiomem access paths
-- Implement pure Node.js sysfs (/sys/class/gpio) GPIO manager
-- Guarantee 100% clean startup on dev machines and Raspberry Pi Linux hardware
+- Replace legacy rpicam-vid with modern libcamera-vid (--nopreview) which operates cleanly without bcm2835/gpiomem
+- Add progressive fallback to v4l2 ffmpeg and high-performance MJPEG frame stream
+- Fix restart loop when a camera utility exits quickly without frame output
