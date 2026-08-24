@@ -1,5 +1,5 @@
-fix(camera): eliminate rpicam-vid bcm2835_init gpiomem dependency and restart loops
+fix(camera): isolate stderr to suppress bcm2835_init notices and streamline camera discovery
 
-- Replace legacy rpicam-vid with modern libcamera-vid (--nopreview) which operates cleanly without bcm2835/gpiomem
-- Add progressive fallback to v4l2 ffmpeg and high-performance MJPEG frame stream
-- Fix restart loop when a camera utility exits quickly without frame output
+- Route camera subprocess stderr through filtered stream parser to suppress non-critical bcm2835_init LED warnings
+- Add modern libcamera-vid and v4l2 ffmpeg discovery with graceful MJPEG fallback
+- Prevent infinite restart loops if hardware utilities are unconfigured on the host

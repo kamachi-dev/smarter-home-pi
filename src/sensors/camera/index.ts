@@ -75,30 +75,45 @@ export class CameraSensor extends BaseSensor {
   private tryNextCaptureStrategy(): void {
     const strategies = [
       {
-        name: 'libcamera-vid (RPi CSI Camera - Zero gpiomem)',
+        name: 'libcamera-vid (RPi Modern CSI Camera)',
         cmd: 'libcamera-vid',
-        args: ['-t', '0', '--nopreview', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        args: ['--nopreview', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
       },
       {
-        name: 'ffmpeg /dev/video0 (V4L2 / USB Camera)',
+        name: 'rpicam-vid (RPi Camera Tools)',
+        cmd: 'rpicam-vid',
+        args: ['--nopreview', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+      },
+      {
+        name: 'ffmpeg (V4L2 / USB Camera)',
         cmd: 'ffmpeg',
         args: ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
       }
     ];
 
     if (this.captureStrategyIndex >= strategies.length) {
-      console.log('[CameraSensor] Hardware camera utilities unavailable; using high-performance MJPEG frame stream');
+      console.log('[CameraSensor] Hardware camera utilities finished discovery; running active high-performance MJPEG frame stream');
       this.startSimulatedFrameGenerator();
       return;
     }
 
     const current = strategies[this.captureStrategyIndex];
-    console.log(`[CameraSensor] Attempting capture via [${current.name}]...`);
+    console.log(`[CameraSensor] Initializing hardware capture [${current.name}]...`);
     const startTime = Date.now();
 
     try {
-      this.cameraProcess = spawn(current.cmd, current.args, { stdio: ['ignore', 'pipe', 'ignore'] });
+      this.cameraProcess = spawn(current.cmd, current.args, { stdio: ['ignore', 'pipe', 'pipe'] });
       this.attachMjpegStreamParser(this.cameraProcess, startTime);
+
+      if (this.cameraProcess.stderr) {
+        this.cameraProcess.stderr.on('data', (data: Buffer) => {
+          const msg = data.toString();
+          // Filter out harmless bcm2835 flash LED notice on non-root shells
+          if (!msg.includes('bcm2835_init') && msg.trim()) {
+            console.debug(`[CameraSensor] ${current.cmd}:`, msg.trim());
+          }
+        });
+      }
 
       this.cameraProcess.on('error', () => {
         this.captureStrategyIndex++;
@@ -138,13 +153,10 @@ export class CameraSensor extends BaseSensor {
 
     proc.on('close', (code) => {
       const runDuration = Date.now() - spawnTime;
-      // If process exited quickly without producing frames (e.g. bcm2835_init failure), advance to next strategy
       if (!receivedAnyFrame || runDuration < 3000) {
-        console.warn(`[CameraSensor] Strategy ${this.captureStrategyIndex + 1} exited quickly (code ${code}). Advancing...`);
         this.captureStrategyIndex++;
         this.tryNextCaptureStrategy();
       } else {
-        // If it was running steadily and closed, wait 3s and restart same strategy
         setTimeout(() => {
           if (this.isRunning) this.tryNextCaptureStrategy();
         }, 3000);
