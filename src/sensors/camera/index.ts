@@ -80,11 +80,6 @@ export class CameraSensor extends BaseSensor {
         args: ['--nopreview', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
       },
       {
-        name: 'rpicam-vid (RPi Camera Tools)',
-        cmd: 'rpicam-vid',
-        args: ['--nopreview', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
-      },
-      {
         name: 'ffmpeg (V4L2 / USB Camera)',
         cmd: 'ffmpeg',
         args: ['-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', '/dev/video0', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']

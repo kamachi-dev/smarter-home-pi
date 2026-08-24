@@ -1,6 +1,5 @@
-feat(hardware): implement VirtualHardwareManager and integrate native ds18b20-raspi & node-dht-sensor
+fix(hardware): eliminate all legacy rpicam-vid calls and protect node-dht-sensor gpiomem access
 
-- Implement VirtualHardwareManager that mocks /dev/gpiomem, /dev/video0, and /sys/bus/w1 for seamless npm run dev execution
-- Integrate industry-standard native sensor libraries (ds18b20-raspi for 1-Wire and node-dht-sensor for DHT11/DHT22)
-- Provide transparent sysfs emulation with continuous background w1_slave data generation
-- Ensure zero ENOENT / missing directory errors during development and native hardware execution
+- Completely remove legacy rpicam-vid from camera strategies, keeping libcamera-vid and v4l2
+- Add fs.existsSync('/dev/gpiomem') guard before invoking node-dht-sensor to eliminate bcm2835_init errors
+- Guarantee clean startup across Raspberry Pi OS, Docker, and dev environments

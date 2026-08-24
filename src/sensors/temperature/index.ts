@@ -84,7 +84,8 @@ export class TemperatureSensor extends BaseSensor {
 
     // 2. Native DHT11 / DHT22 Sensor Read (node-dht-sensor on Raspberry Pi)
     if ((this.model === 'DHT11' || this.model === 'DHT22') && this.config.bcmGpio !== undefined) {
-      if (this.dhtDriver) {
+      const hasGpiomem = fs.existsSync('/dev/gpiomem');
+      if (this.dhtDriver && hasGpiomem) {
         try {
           const sensorType = this.model === 'DHT11' ? 11 : 22;
           const res = this.dhtDriver.read(sensorType, this.config.bcmGpio);
