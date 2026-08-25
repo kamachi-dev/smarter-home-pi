@@ -6,6 +6,7 @@ import { BaseSensor } from '../base.js';
 import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/index.js';
 import { FaceRecognitionEngine } from './faceRecognition.js';
 import { FrameAnnotator } from './frameAnnotator.js';
+import { StandbyFrameGenerator } from './standbyGenerator.js';
 import { GpioManager } from '../../hardware/gpio.js';
 
 export class CameraSensor extends BaseSensor {
@@ -203,68 +204,15 @@ export class CameraSensor extends BaseSensor {
    */
   private startStandbyFrameGenerator(): void {
     if (this.simulationInterval) return;
-    const width = 640;
-    const height = 480;
-    let step = 0;
-
-    const generateSimulatedFrame = (): Buffer => {
-      step += 0.05;
-      const frameData = Buffer.alloc(width * height * 4);
-
-      // Gradient background (security camera night/indoor ambiance)
-      for (let y = 0; y < height; y++) {
-        const yNorm = y / height;
-        const r = Math.round(20 + yNorm * 10);
-        const g = Math.round(22 + yNorm * 12);
-        const b = Math.round(26 + yNorm * 15);
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          frameData[idx] = r;
-          frameData[idx + 1] = g;
-          frameData[idx + 2] = b;
-          frameData[idx + 3] = 255;
-        }
-      }
-
-      // Draw door / entryway frame in center
-      const doorX = Math.round(width / 2 - 90);
-      const doorY = 70;
-      const doorW = 180;
-      const doorH = 340;
-
-      for (let y = doorY; y < doorY + doorH; y++) {
-        for (let x = doorX; x < doorX + doorW; x++) {
-          const idx = (y * width + x) * 4;
-          frameData[idx] = 14;
-          frameData[idx + 1] = 16;
-          frameData[idx + 2] = 20;
-        }
-      }
-
-      // Light cone from top
-      for (let y = 0; y < height; y++) {
-        const halfW = 40 + (y / height) * 220;
-        const left = Math.max(0, Math.round(width / 2 - halfW));
-        const right = Math.min(width, Math.round(width / 2 + halfW));
-        for (let x = left; x < right; x++) {
-          const idx = (y * width + x) * 4;
-          const alpha = 0.08 * (1 - y / height);
-          frameData[idx] = Math.min(255, Math.round(frameData[idx] + 254 * alpha));
-          frameData[idx + 1] = Math.min(255, Math.round(frameData[idx + 1] + 240 * alpha));
-          frameData[idx + 2] = Math.min(255, Math.round(frameData[idx + 2] + 200 * alpha));
-        }
-      }
-
-      const encoded = jpeg.encode({ data: frameData, width, height }, 65);
-      return encoded.data;
-    };
 
     this.simulationInterval = setInterval(() => {
       if (!this.isRunning) {
         if (this.simulationInterval) clearInterval(this.simulationInterval);
         return;
       }
-      this.onNewCameraFrame(generateSimulatedFrame());
+      const { frameData, detection } = StandbyFrameGenerator.generateFrame(640, 480);
+      this.currentDetection = detection;
+      this.onNewCameraFrame(frameData);
     }, 200);
   }
 

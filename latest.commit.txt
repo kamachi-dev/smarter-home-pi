@@ -1,5 +1,5 @@
-feat(sync): persist active token on Pi and auto-initialize camera broadcast on startup
+feat(camera): enhance standby simulated camera rendering with illuminated entryway & face detection
 
-- Save active home token in `data/hub.config.json` and `.env` on the Raspberry Pi so streaming initializes automatically on boot.
-- Auto-subscribe to the home's Supabase Realtime broadcast channel (`home-camera-${homeId}`) upon startup and whenever the token configuration is updated.
+- Modularize standby frame rendering into dedicated `StandbyFrameGenerator` helper to maintain <= 500 LOC per file.
+- Generate realistic, illuminated Front Porch security camera scene with animated subject, smart lock, wall lighting, and active facial detection.
 - Pass TypeScript compilation and keep all source files under 500 lines.
