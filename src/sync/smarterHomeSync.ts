@@ -198,31 +198,32 @@ export class SmarterHomeSync {
     const base64Image = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
     const isoTimestamp = new Date().toISOString();
 
-    if (this.supabase) {
+    if (this.supabase && config.supabaseUrl && config.supabaseKey) {
       try {
         const homeId = await this.getLinkedHomeId();
         if (homeId) {
-          // Initialize persistent broadcast channel if not present
-          if (!this.cameraChannel && !this.isChannelConnecting) {
-            this.initCameraBroadcast();
-          }
-
-          // 1. Send via active Realtime WebSocket broadcast if subscribed
-          if (this.isCameraChannelSubscribed && this.cameraChannel && base64Image.length < 90000) {
-            try {
-              this.cameraChannel.send({
-                type: 'broadcast',
+          // 1. Send via Supabase Realtime Broadcast REST API (Stateless, zero-drop, instant WebSocket distribution to web/mobile clients)
+          fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {
+            method: 'POST',
+            headers: {
+              'apikey': config.supabaseKey,
+              'Authorization': `Bearer ${config.supabaseKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messages: [{
+                topic: `home-camera-${homeId}`,
                 event: 'camera_frame',
                 payload: {
                   image: base64Image,
                   faceDetection: faceDetection || null,
                   timestamp: isoTimestamp
                 }
-              }).catch(() => {});
-            } catch {}
-          }
+              }]
+            })
+          }).catch(() => {});
 
-          // 2. Upsert latest frame into home_states every 800ms for instant state sync & static clients
+          // 2. Upsert latest frame into home_states every 800ms for instant initial page loads
           if (now - this.lastStateUpsert > 800) {
             this.lastStateUpsert = now;
             await this.supabase.from('home_states').upsert({
@@ -237,6 +238,7 @@ export class SmarterHomeSync {
               updated_at: isoTimestamp
             }, { onConflict: 'home_id,key' });
           }
+          return true;
         }
       } catch {}
     }

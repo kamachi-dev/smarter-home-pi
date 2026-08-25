@@ -1,5 +1,5 @@
-fix(camera): correct MJPEG stream boundary and stream chunk parsing
+feat(sync): implement Supabase Realtime Broadcast REST delivery
 
-- Fix multipart MJPEG stream boundary header (`boundary=frame`) in `/api/camera/stream` and immediately dispatch latest frame on connection.
-- Refactor MJPEG stream chunk parser in `CameraSensor` with byte-aligned SOI (`0xff 0xd8`) and EOI (`0xff 0xd9`) boundary slicing.
+- Leverage Supabase Realtime Broadcast REST API (`POST /realtime/v1/api/broadcast`) for stateless edge-to-cloud frame delivery with zero WebSocket drops.
+- Retain dual-stream pattern with direct `home_states.camera_feed` upsert every 800ms.
 - Pass TypeScript compilation and keep all source files under 500 lines.
