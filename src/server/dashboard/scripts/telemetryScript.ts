@@ -11,12 +11,12 @@ export const telemetryScript = `
     window.wsClient = null;
 
     async function init() {
-      await fetchStatus();
-      await fetchPins();
-      await fetchFaces();
-      setupWebSocket();
-      initAutoWebcam();
-      startCanvasRenderLoop();
+      try { startCanvasRenderLoop(); } catch (e) { console.error('Render loop error:', e); }
+      try { setupWebSocket(); } catch (e) {}
+      try { await fetchStatus(); } catch (e) {}
+      try { await fetchPins(); } catch (e) {}
+      try { await fetchFaces(); } catch (e) {}
+      try { initAutoWebcam(); } catch (e) {}
     }
 
     async function fetchStatus() {
@@ -150,7 +150,7 @@ export const telemetryScript = `
           '<div class="text-xs font-bold text-stone-200">' + f.name + '</div>' +
           '<div class="text-[10px] text-stone-500">' + (f.notes || 'Household Member') + '</div>' +
         '</div>' +
-        '<button onclick="removeFace(\\\'' + f.id + '\\\')" class="text-stone-600 hover:text-red-400 text-xs px-2 py-1">&times;</button>';
+        '<button onclick="removeFace(\'' + f.id + '\')" class="text-stone-600 hover:text-red-400 text-xs px-2 py-1">&times;</button>';
         list.appendChild(item);
       });
     }

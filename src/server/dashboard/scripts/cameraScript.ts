@@ -91,55 +91,6 @@ export const cameraScript = `
           // Draw real local webcam frame
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           captureAndSendWebcamFrame(video);
-        } else if (!isStreamLoaded) {
-          streamImg.classList.remove('hidden');
-          // Render simulation backdrop if physical camera is offline
-          const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-          bgGrad.addColorStop(0, '#1c1917');
-          bgGrad.addColorStop(0.65, '#292524');
-          bgGrad.addColorStop(1, '#0c0a09');
-          ctx.fillStyle = bgGrad;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Foyer light cone
-          const lightGrad = ctx.createRadialGradient(canvas.width / 2, 40, 10, canvas.width / 2, 260, 360);
-          lightGrad.addColorStop(0, 'rgba(254, 243, 199, 0.22)');
-          lightGrad.addColorStop(0.5, 'rgba(251, 191, 36, 0.08)');
-          lightGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = lightGrad;
-          ctx.beginPath();
-          ctx.moveTo(canvas.width / 2 - 120, 0);
-          ctx.lineTo(canvas.width / 2 + 120, 0);
-          ctx.lineTo(canvas.width, canvas.height);
-          ctx.lineTo(0, canvas.height);
-          ctx.closePath();
-          ctx.fill();
-
-          // Door & Archway
-          ctx.fillStyle = '#141210';
-          ctx.fillRect(canvas.width / 2 - 110, 60, 220, 320);
-          ctx.strokeStyle = '#44403c';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(canvas.width / 2 - 110, 60, 220, 320);
-
-          // Render person silhouette if detected
-          const det = state.currentFaceDetection;
-          if (det && det.detected) {
-            const isRec = det.status === 'recognized';
-            const sway = Math.sin(t) * 6;
-            const px = canvas.width / 2 + sway;
-            const py = 150 + Math.cos(t * 0.8) * 4;
-
-            ctx.fillStyle = isRec ? '#1e293b' : '#3f3f46';
-            ctx.beginPath();
-            ctx.ellipse(px, py + 140, 75, 100, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = isRec ? '#fed7aa' : '#cbd5e1';
-            ctx.beginPath();
-            ctx.ellipse(px, py + 25, 45, 55, 0, 0, Math.PI * 2);
-            ctx.fill();
-          }
         } else {
           streamImg.classList.remove('hidden');
         }

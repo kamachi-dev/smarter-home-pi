@@ -164,9 +164,9 @@ export function getDashboardHtmlTemplate(script: string): string {
             <!-- Real Raspberry Pi Camera MJPEG Stream with Dynamic Face Bounding Box Overlay -->
             <div class="relative aspect-video bg-stone-950 rounded-xl border border-stone-800 overflow-hidden flex items-center justify-center group shadow-2xl">
               <!-- Live Hardware MJPEG Video Feed -->
-              <img id="camera-mjpeg-stream" src="/api/camera/stream" alt="" class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300 opacity-0" onerror="this.style.opacity='0'; handleStreamError(this)" onload="this.style.opacity='1'; handleStreamLoad()" />
+              <img id="camera-mjpeg-stream" src="/api/camera/stream" alt="Live Camera" class="absolute inset-0 w-full h-full object-cover z-0" onerror="handleStreamError(this)" onload="handleStreamLoad()" />
               <video id="webcam-video" autoplay playsinline muted class="hidden"></video>
-              <canvas id="live-video-canvas" width="640" height="480" class="absolute inset-0 w-full h-full object-cover pointer-events-none"></canvas>
+              <canvas id="live-video-canvas" width="640" height="480" class="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"></canvas>
               
               <!-- Live HUD overlay -->
               <div class="absolute top-2.5 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-emerald-400 font-bold z-10">

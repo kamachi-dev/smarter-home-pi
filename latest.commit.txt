@@ -1,5 +1,5 @@
-fix(camera): hardware compression and broadcast payload boundary protection
+fix(dashboard): resolve camera feed visibility and client script execution in Pi UI
 
-- Add `--quality 50` hardware JPEG compression and 10 FPS to `rpicam-vid` and `libcamera-vid` to reduce hardware frame size and CPU utilization.
-- Add payload boundary protection (`< 90KB`) and safe error-handling in `sendLiveFrameToSmarterHome` to keep Supabase Realtime broadcast channels permanently connected.
+- Fix string escape syntax error in `telemetryScript.ts` to allow client-side initialization and timecode ticker to run immediately.
+- Remove `opacity-0` and opaque canvas background in `html.ts` and `cameraScript.ts` so live hardware MJPEG stream `/api/camera/stream` is directly visible with dynamic HUD bounding reticles.
 - Pass TypeScript compilation and keep all source files under 500 lines.
