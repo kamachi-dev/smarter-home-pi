@@ -1,5 +1,5 @@
-fix(sync): protect Realtime WebSocket broadcast from race conditions and rate limits
+perf(camera): optimize hardware JPEG encoding quality and accelerate state synchronization
 
-- Add `isCameraChannelSubscribed` and `isChannelConnecting` guards in `SmarterHomeSync` to prevent calling `.send()` while channel handshakes are pending.
-- Throttle camera broadcast frame stream to stable ~3.3 FPS and eliminate redundant reconnection loops.
+- Optimize FrameAnnotator JPEG encoding quality to 50 for efficient, lightweight network transmission under Supabase WebSocket payload limits.
+- Accelerate `home_states.camera_feed` upsert frequency to 800ms for continuous streaming fallback.
 - Pass TypeScript compilation and keep all source files under 500 lines.

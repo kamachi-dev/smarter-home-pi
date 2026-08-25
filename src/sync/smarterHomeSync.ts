@@ -220,8 +220,8 @@ export class SmarterHomeSync {
             }).catch(() => {});
           }
 
-          // 2. Upsert latest frame into home_states every 1.5 seconds for instant state sync & static clients
-          if (now - this.lastStateUpsert > 1500) {
+          // 2. Upsert latest frame into home_states every 800ms for instant state sync & static clients
+          if (now - this.lastStateUpsert > 800) {
             this.lastStateUpsert = now;
             await this.supabase.from('home_states').upsert({
               home_id: homeId,

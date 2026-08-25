@@ -63,7 +63,7 @@ export class FrameAnnotator {
   public static annotateFrame(
     imageBuffer: Buffer,
     detection?: FaceDetectionPayload | null,
-    quality: number = 80
+    quality: number = 50
   ): Buffer {
     try {
       const decoded = jpeg.decode(imageBuffer, { useTArray: true });
