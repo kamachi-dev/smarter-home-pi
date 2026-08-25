@@ -145,6 +145,7 @@ export class SensorRegistry extends EventEmitter {
     }
 
     console.log(`[SensorRegistry] Registered ${cfg.type} sensor "${cfg.name}" [ID: ${cfg.id}]`);
+    this.emit('sensor_registered', sensorInstance);
     return sensorInstance;
   }
 

@@ -1,4 +1,5 @@
-feat(camera): burn live microsecond timecode into JPEG frames
+fix(sync): continuous camera broadcast ticker and sensor event registration
 
-- Embed live ISO timestamp directly into the hardware camera JPEG HUD overlay in `FrameAnnotator` to visually confirm per-frame video refresh.
-- Pass TypeScript compilation and keep all source files under 500 lines.
+- Fix missing `sensor_registered` emission in `SensorRegistry.registerSensor` to ensure event listeners attach properly.
+- Add autonomous 300ms camera stream broadcast loop in `SmarterHomeSync.startSyncLoop` to guarantee continuous, uninterrupted live frame transmission to Supabase on startup.
+- Pass TypeScript compilation with 0 errors and maintain all source files under 500 lines.

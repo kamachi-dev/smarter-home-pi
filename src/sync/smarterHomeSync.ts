@@ -103,6 +103,7 @@ export class SmarterHomeSync {
 
   private lastLiveFramePush = 0;
   private lastStateUpsert = 0;
+  private lastBroadcastLog = 0;
 
   private setupListeners(): void {
     // Immediate push when face detection status changes
@@ -195,6 +196,12 @@ export class SmarterHomeSync {
               updated_at: isoTimestamp
             }, { onConflict: 'home_id,key' });
           }
+
+          if (now - this.lastBroadcastLog > 8000) {
+            this.lastBroadcastLog = now;
+            console.log(`[SmarterHomeSync] 📡 Actively broadcasting live camera frames to Supabase (size: ${frameBuffer.length} bytes, home: ${homeId.substring(0, 8)}...)`);
+          }
+
           return true;
         }
       } catch {}
@@ -224,12 +231,27 @@ export class SmarterHomeSync {
     return true;
   }
 
+  private cameraStreamTimer: NodeJS.Timeout | null = null;
+
   private startSyncLoop(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
+    if (this.cameraStreamTimer) clearInterval(this.cameraStreamTimer);
 
+    // 1. General telemetry sync loop (temperature, pin status, humidity)
     this.syncTimer = setInterval(async () => {
       await this.syncTelemetry();
     }, config.syncIntervalMs);
+
+    // 2. Continuous camera frame stream loop (~3.3 FPS)
+    this.cameraStreamTimer = setInterval(async () => {
+      const cam = this.registry.getAllSensors().find(s => s.type === 'camera') as any;
+      if (cam && typeof cam.getLatestFrame === 'function') {
+        const frame = cam.getLatestFrame();
+        if (frame) {
+          await this.sendLiveFrameToSmarterHome(frame, cam.getFaceDetection?.()).catch(() => {});
+        }
+      }
+    }, 300);
   }
 
   /**
