@@ -145,4 +145,58 @@ export const modalScript = `
       await fetch('/api/faces/' + id, { method: 'DELETE' });
       await fetchFaces();
     }
+
+    async function openTokenModal() {
+      try {
+        const res = await fetch('/api/config/token');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('modal-cloud-token').value = data.token || '';
+          document.getElementById('modal-cloud-url').value = data.apiUrl || '';
+        }
+      } catch {}
+      document.getElementById('token-modal').classList.remove('hidden');
+      document.getElementById('token-modal').classList.add('flex');
+    }
+
+    function closeTokenModal() {
+      document.getElementById('token-modal').classList.add('hidden');
+      document.getElementById('token-modal').classList.remove('flex');
+    }
+
+    async function handleSaveToken(e) {
+      e.preventDefault();
+      const token = document.getElementById('modal-cloud-token').value.trim();
+      const apiUrl = document.getElementById('modal-cloud-url').value.trim();
+      const saveBtn = document.getElementById('token-save-btn');
+
+      saveBtn.textContent = 'Saving...';
+      saveBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/config/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, apiUrl })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message || 'Token updated successfully!');
+          closeTokenModal();
+          const btnLabel = document.getElementById('token-btn-label');
+          if (btnLabel) {
+            btnLabel.textContent = token ? 'Home Linked ✅' : 'Link Home Token';
+          }
+          await fetchStatus();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Failed to save token: ' + err.message);
+      } finally {
+        saveBtn.textContent = 'Save & Link';
+        saveBtn.disabled = false;
+      }
+    }
 `;
+

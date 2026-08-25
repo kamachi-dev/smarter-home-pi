@@ -101,6 +101,8 @@ export class SmarterHomeSync {
     }
   }
 
+  private lastLiveFramePush = 0;
+
   private setupListeners(): void {
     // Immediate push when face detection status changes
     this.registry.on('face_detection', async (event: { sensorId: string; sensorName: string } & FaceDetectionPayload) => {
@@ -108,6 +110,52 @@ export class SmarterHomeSync {
         await this.sendFaceAlertToSmarterHome(event);
       }
     });
+
+    // Listen for processed camera frames and stream live footage to Smarter Home
+    this.registry.on('reading', (reading: SensorReading) => {
+      if (reading.sensorType === 'camera') {
+        const camSensor = this.registry.getSensor(reading.sensorId) as any;
+        const frame = camSensor?.getLatestFrame?.();
+        if (frame) {
+          this.sendLiveFrameToSmarterHome(frame, reading.faceDetection).catch(() => {});
+        }
+      }
+    });
+  }
+
+  /**
+   * Pushes the live processed camera frame (with face recognition squares) to Smarter Home
+   */
+  public async sendLiveFrameToSmarterHome(frameBuffer: Buffer, faceDetection?: FaceDetectionPayload): Promise<boolean> {
+    if (!config.smarterHomeToken) return false;
+
+    const now = Date.now();
+    if (now - this.lastLiveFramePush < 300) return false; // Stream at ~3-4 FPS
+    this.lastLiveFramePush = now;
+
+    try {
+      const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/camera/live`;
+      const base64Image = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
+
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-pi-token': config.smarterHomeToken,
+          'x-pi-api-key': config.smarterHomeApiKey
+        },
+        body: JSON.stringify({
+          image: base64Image,
+          faceDetection: faceDetection || null,
+          timestamp: new Date().toISOString()
+        }),
+        signal: AbortSignal.timeout(2500)
+      });
+
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   private startSyncLoop(): void {
@@ -173,6 +221,7 @@ export class SmarterHomeSync {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-pi-token': config.smarterHomeToken,
           'x-pi-api-key': config.smarterHomeApiKey
         },
         body: JSON.stringify(payload),
@@ -242,6 +291,7 @@ export class SmarterHomeSync {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-pi-token': config.smarterHomeToken,
           'x-pi-api-key': config.smarterHomeApiKey
         },
         body: JSON.stringify(payload),

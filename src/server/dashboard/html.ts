@@ -88,6 +88,12 @@ export function getDashboardHtmlTemplate(script: string): string {
           <span class="text-stone-400">Sync:</span>
           <span id="sync-status-text" class="text-stone-200 font-bold">Active</span>
         </div>
+        <button onclick="openTokenModal()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/10 border border-sky-500/30 text-sky-400 hover:bg-sky-500/20 active:scale-95 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+          </svg>
+          <span id="token-btn-label">Link Home Token</span>
+        </button>
         <button onclick="triggerManualSync()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:scale-95 transition-all">
           Sync Now
         </button>
@@ -340,6 +346,39 @@ export function getDashboardHtmlTemplate(script: string): string {
         <div class="flex justify-end gap-2 pt-3 border-t border-stone-800">
           <button type="button" onclick="closeEnrollFaceModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
           <button id="train-submit-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed">Train AI Model</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Smarter Home Permanent Token Modal -->
+  <div id="token-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="glass-panel bg-stone-925 p-6 rounded-2xl max-w-md w-full border border-stone-800 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+          </svg>
+          Link to Smarter Home
+        </h3>
+        <button onclick="closeTokenModal()" class="text-stone-400 hover:text-white">&times;</button>
+      </div>
+
+      <form id="token-form" onsubmit="handleSaveToken(event)" class="space-y-3.5 text-xs font-medium">
+        <div>
+          <label class="block text-stone-400 mb-1">Permanent Home Token</label>
+          <input id="modal-cloud-token" required type="text" placeholder="e.g. smp_live_abcdef123456..." class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-sky-500">
+          <p class="text-[10px] text-stone-500 mt-1">Generated from your Smarter Home Settings &gt; Raspberry Pi &amp; Camera Linking section.</p>
+        </div>
+
+        <div>
+          <label class="block text-stone-400 mb-1">Smarter Home URL</label>
+          <input id="modal-cloud-url" type="url" placeholder="http://localhost:3000" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-500">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-stone-800">
+          <button type="button" onclick="closeTokenModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
+          <button id="token-save-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-sky-400 hover:bg-sky-300">Save &amp; Link</button>
         </div>
       </form>
     </div>

@@ -1,8 +1,7 @@
-feat(camera): process each frame with face recognition and render recognition squares
+feat(camera): add permanent token cloud linking and end-to-end live footage streaming
 
-- Add `FrameAnnotator` to process camera frames and render facial recognition bounding boxes, corner reticles, confidence tags, and HUD overlays directly onto video frames.
-- Update `FaceRecognitionEngine` to support multi-face detection, landmark extraction, and bounding box arrays with confidence ratings.
-- Update `CameraSensor` to run facial recognition on captured/standby/ingested frames and annotate with recognition squares before updating live footage.
-- Add `POST /api/camera/frame` and WebSocket `camera_frame` message handling for real-time external and client webcam frame ingestion.
-- Split `dashboard.ts` into modular components (`html.ts`, `clientScript.ts`, `telemetryScript.ts`, `cameraScript.ts`, `modalScript.ts`) adhering to the 500-line limit rule.
-- Enhance dashboard canvas and live footage loop to capture webcam frames for server AI identification and render dynamic recognition squares.
+- Add `smarterHomeToken` config support in `src/config/env.ts` with local persistence in `data/hub.config.json`.
+- Update `SmarterHomeSync` to stream live processed video frames with face recognition bounding boxes to `/api/pi/camera/live` with `x-pi-token` authentication header.
+- Add `GET` and `POST /api/config/token` in Fastify server (`src/server/routes/api.ts`) for managing permanent token settings at runtime.
+- Add "Link to Smarter Home" modal and top bar button in Pi dashboard UI (`html.ts` and `modalScript.ts`).
+- Ensure all source files adhere to 500-line limits and pass full TypeScript build verification.

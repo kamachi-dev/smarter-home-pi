@@ -4,7 +4,7 @@ import { FaceRecognitionEngine } from '../../sensors/camera/faceRecognition.js';
 import { SmarterHomeSync } from '../../sync/smarterHomeSync.js';
 import { GpioManager } from '../../hardware/gpio.js';
 import { SensorConfig, SensorType } from '../../types/index.js';
-import { config } from '../../config/env.js';
+import { config, saveHubConfig } from '../../config/env.js';
 
 export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
   const registry = SensorRegistry.getInstance();
@@ -255,6 +255,39 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     return {
       success,
       syncStatus: syncGateway.getStatus()
+    };
+  });
+
+  // Permanent Token & Cloud Link Configuration
+  server.get('/api/config/token', async () => {
+    return {
+      token: config.smarterHomeToken || '',
+      apiUrl: config.smarterHomeApiUrl,
+      linked: Boolean(config.smarterHomeToken),
+      syncStatus: syncGateway.getStatus()
+    };
+  });
+
+  server.post<{
+    Body: {
+      token: string;
+      apiUrl?: string;
+    };
+  }>('/api/config/token', async (request, reply) => {
+    const { token, apiUrl } = request.body || {};
+    if (token === undefined) {
+      return reply.code(400).send({ error: 'Token string is required.' });
+    }
+
+    saveHubConfig(token.trim(), apiUrl?.trim());
+    const syncSuccess = await syncGateway.syncTelemetry();
+
+    return {
+      success: true,
+      token: config.smarterHomeToken,
+      apiUrl: config.smarterHomeApiUrl,
+      syncSuccess,
+      message: config.smarterHomeToken ? 'Permanent token saved and connected to Smarter Home!' : 'Token cleared.'
     };
   });
 };

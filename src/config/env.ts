@@ -9,6 +9,7 @@ export interface AppConfig {
   host: string;
   smarterHomeApiUrl: string;
   smarterHomeApiKey: string;
+  smarterHomeToken: string;
   supabaseUrl: string;
   supabaseKey: string;
   syncIntervalMs: number;
@@ -32,11 +33,20 @@ if (!fs.existsSync(enrolledDir)) {
   } catch {}
 }
 
+const hubConfigPath = path.resolve(dataDir, 'hub.config.json');
+let savedHubConfig: { token?: string; apiUrl?: string } = {};
+if (fs.existsSync(hubConfigPath)) {
+  try {
+    savedHubConfig = JSON.parse(fs.readFileSync(hubConfigPath, 'utf8'));
+  } catch {}
+}
+
 export const config: AppConfig = {
   port: parseInt(process.env.PORT || '4000', 10),
   host: process.env.HOST || '0.0.0.0',
-  smarterHomeApiUrl: process.env.API_URL || process.env.SMARTER_HOME_API_URL || 'http://localhost:3000',
+  smarterHomeApiUrl: savedHubConfig.apiUrl || process.env.API_URL || process.env.SMARTER_HOME_API_URL || 'http://localhost:3000',
   smarterHomeApiKey: process.env.SMARTER_HOME_API_KEY || 'pi-secret-key-default',
+  smarterHomeToken: savedHubConfig.token || process.env.SMARTER_HOME_TOKEN || '',
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseKey: process.env.SUPABASE_KEY || '',
   syncIntervalMs: parseInt(process.env.SYNC_INTERVAL_MS || '3000', 10),
@@ -45,3 +55,12 @@ export const config: AppConfig = {
   modelsPath: process.env.MODELS_PATH || path.resolve(process.cwd(), 'models'),
   isSimulatedHardware: process.env.FORCE_SIMULATION === 'true' || process.platform !== 'linux',
 };
+
+export function saveHubConfig(token: string, apiUrl?: string): void {
+  config.smarterHomeToken = token;
+  if (apiUrl) config.smarterHomeApiUrl = apiUrl;
+  try {
+    fs.writeFileSync(hubConfigPath, JSON.stringify({ token: config.smarterHomeToken, apiUrl: config.smarterHomeApiUrl }, null, 2), 'utf8');
+  } catch {}
+}
+
