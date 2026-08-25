@@ -289,7 +289,6 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
 
     saveHubConfig(token.trim(), apiUrl?.trim());
-    await syncGateway.initCameraBroadcast();
     const syncSuccess = await syncGateway.syncTelemetry();
 
     return {

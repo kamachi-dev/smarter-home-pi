@@ -74,9 +74,6 @@ export class SmarterHomeSync {
           }
         })
         .subscribe();
-
-      // 3. Immediately initialize camera broadcast channel if linked
-      this.initCameraBroadcast();
     } catch (err) {
       console.warn('[SmarterHomeSync] Supabase Realtime init error:', (err as Error).message);
     }
@@ -105,47 +102,7 @@ export class SmarterHomeSync {
   }
 
   private lastLiveFramePush = 0;
-  private cameraChannel: any = null;
-  private activeCameraHomeId: string | null = null;
-  private isCameraChannelSubscribed = false;
-  private isChannelConnecting = false;
   private lastStateUpsert = 0;
-
-  public async initCameraBroadcast(): Promise<void> {
-    if (!this.supabase || this.isChannelConnecting) return;
-    const homeId = await this.getLinkedHomeId();
-    if (homeId && (!this.cameraChannel || this.activeCameraHomeId !== homeId)) {
-      this.isChannelConnecting = true;
-      if (this.cameraChannel) {
-        try {
-          this.supabase.removeChannel(this.cameraChannel);
-        } catch {}
-      }
-      this.activeCameraHomeId = homeId;
-      this.isCameraChannelSubscribed = false;
-      this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
-        config: { broadcast: { self: false } }
-      });
-      this.cameraChannel.subscribe((status: string) => {
-        this.isChannelConnecting = false;
-        console.log(`[SmarterHomeSync] Camera broadcast channel for home [${homeId}]: ${status}`);
-        if (status === 'SUBSCRIBED') {
-          this.isCameraChannelSubscribed = true;
-        } else {
-          this.isCameraChannelSubscribed = false;
-          if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
-            setTimeout(() => {
-              if (this.activeCameraHomeId === homeId) {
-                console.log(`[SmarterHomeSync] Retrying camera broadcast channel subscription for home [${homeId}]...`);
-                this.activeCameraHomeId = null;
-                this.initCameraBroadcast();
-              }
-            }, 5000);
-          }
-        }
-      });
-    }
-  }
 
   private setupListeners(): void {
     // Immediate push when face detection status changes

@@ -1,5 +1,5 @@
-feat(sync): implement Supabase Realtime Broadcast REST delivery
+refactor(sync): remove redundant inbound WebSocket channel subscription on Pi publisher
 
-- Leverage Supabase Realtime Broadcast REST API (`POST /realtime/v1/api/broadcast`) for stateless edge-to-cloud frame delivery with zero WebSocket drops.
-- Retain dual-stream pattern with direct `home_states.camera_feed` upsert every 800ms.
-- Pass TypeScript compilation and keep all source files under 500 lines.
+- Remove unused client-side `initCameraBroadcast()` WebSocket subscription on the Pi publisher to prevent false CHANNEL_ERROR/CLOSED reconnect loops.
+- Deliver all live hardware camera frames directly through Supabase Realtime Broadcast REST API (`POST /realtime/v1/api/broadcast`) and concurrent `home_states` database state upserts.
+- Pass TypeScript compilation with zero errors and maintain all files under 500 lines.
