@@ -75,8 +75,27 @@ export class SmarterHomeSync {
         })
         .subscribe();
 
+      // 3. Immediately initialize camera broadcast channel if linked
+      this.initCameraBroadcast();
     } catch (err) {
       console.warn('[SmarterHomeSync] Supabase Realtime init error:', (err as Error).message);
+    }
+  }
+
+  public async initCameraBroadcast(): Promise<void> {
+    if (!this.supabase) return;
+    const homeId = await this.getLinkedHomeId();
+    if (homeId && (!this.cameraChannel || this.activeCameraHomeId !== homeId)) {
+      if (this.cameraChannel) {
+        this.supabase.removeChannel(this.cameraChannel);
+      }
+      this.activeCameraHomeId = homeId;
+      this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
+        config: { broadcast: { self: false } }
+      });
+      this.cameraChannel.subscribe((status: string) => {
+        console.log(`[SmarterHomeSync] Camera broadcast channel for home [${homeId}]: ${status}`);
+      });
     }
   }
 
