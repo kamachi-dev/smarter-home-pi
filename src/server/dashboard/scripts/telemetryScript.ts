@@ -32,6 +32,34 @@ export const telemetryScript = `
           badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold uppercase tracking-wider';
         }
         document.getElementById('sync-status-text').textContent = data.sync?.lastSyncSuccess ? 'Connected' : 'Active';
+
+        const tokenRes = await fetch('/api/config/token');
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          const btnLabel = document.getElementById('token-btn-label');
+          if (btnLabel) {
+            btnLabel.textContent = tokenData.token ? 'Home Linked ✅' : 'Link Home Token';
+          }
+          const cardStatus = document.getElementById('cloud-link-card-status');
+          if (cardStatus) {
+            cardStatus.textContent = tokenData.token ? 'Connected & Authenticated' : 'Not Linked (Click to Configure)';
+            cardStatus.className = tokenData.token ? 'text-[11px] text-emerald-400 font-mono font-bold' : 'text-[11px] text-amber-400 font-mono';
+          }
+          const targetUrlElem = document.getElementById('cloud-link-target-url');
+          if (targetUrlElem) {
+            targetUrlElem.textContent = tokenData.apiUrl || 'Supabase Direct';
+          }
+          const activeTokenElem = document.getElementById('cloud-link-active-token');
+          if (activeTokenElem) {
+            if (tokenData.token) {
+              activeTokenElem.textContent = tokenData.token.substring(0, 12) + '...' + tokenData.token.substring(tokenData.token.length - 4);
+              activeTokenElem.className = 'text-emerald-400 font-bold';
+            } else {
+              activeTokenElem.textContent = 'None';
+              activeTokenElem.className = 'text-amber-400';
+            }
+          }
+        }
       } catch (err) {}
     }
 

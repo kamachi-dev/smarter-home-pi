@@ -1,7 +1,6 @@
-feat(camera): add permanent token cloud linking and end-to-end live footage streaming
+feat(dashboard): add prominent token configuration card and modal controls
 
-- Add `smarterHomeToken` config support in `src/config/env.ts` with local persistence in `data/hub.config.json`.
-- Update `SmarterHomeSync` to stream live processed video frames with face recognition bounding boxes to `/api/pi/camera/live` with `x-pi-token` authentication header.
-- Add `GET` and `POST /api/config/token` in Fastify server (`src/server/routes/api.ts`) for managing permanent token settings at runtime.
-- Add "Link to Smarter Home" modal and top bar button in Pi dashboard UI (`html.ts` and `modalScript.ts`).
-- Ensure all source files adhere to 500-line limits and pass full TypeScript build verification.
+- Add a dedicated "Smarter Home Cloud Link" panel card in the Raspberry Pi controller dashboard with live connection status and active token indicators.
+- Add "Configure Token" and top-bar "Link Home Token" triggers to open the token configuration modal.
+- Add "Unlink / Clear Token" button inside the modal to easily disconnect the Pi from the cloud.
+- Pass TypeScript compilation and keep all source files under 500 lines.

@@ -198,5 +198,23 @@ export const modalScript = `
         saveBtn.disabled = false;
       }
     }
+
+    async function handleClearToken() {
+      if (!confirm('Unlink this Raspberry Pi from your Smarter Home Citadel?')) return;
+      try {
+        const res = await fetch('/api/config/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: '', apiUrl: '' })
+        });
+        if (res.ok) {
+          alert('Token cleared. Raspberry Pi is unlinked.');
+          closeTokenModal();
+          await fetchStatus();
+        }
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      }
+    }
 `;
 

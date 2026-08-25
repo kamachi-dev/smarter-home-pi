@@ -244,6 +244,33 @@ export function getDashboardHtmlTemplate(script: string): string {
 
         </div>
 
+        <!-- Smarter Home Cloud Link & Permanent Token Integration Card -->
+        <div class="glass-panel p-5 rounded-2xl space-y-3 border border-sky-500/20 bg-gradient-to-r from-sky-950/20 to-stone-900/40">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-xs font-bold text-white uppercase tracking-wider">Smarter Home Cloud Link</h3>
+                <p id="cloud-link-card-status" class="text-[11px] text-stone-400 font-mono">Checking connection...</p>
+              </div>
+            </div>
+            <button onclick="openTokenModal()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-black shadow-lg shadow-sky-500/15 active:scale-95 transition-all flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+              </svg>
+              <span>Configure Token</span>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[10px] font-mono text-stone-500 pt-1 border-t border-stone-850">
+            <span>Target Cloud URL: <strong id="cloud-link-target-url" class="text-stone-300">--</strong></span>
+            <span>Active Token: <strong id="cloud-link-active-token" class="text-amber-400">None</strong></span>
+          </div>
+        </div>
+
         <!-- Enrolled Household Profiles for Face Recognition -->
         <div class="glass-panel p-5 rounded-2xl space-y-4">
           <div class="flex justify-between items-center">
@@ -376,9 +403,12 @@ export function getDashboardHtmlTemplate(script: string): string {
           <input id="modal-cloud-url" type="url" placeholder="http://localhost:3000" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-500">
         </div>
 
-        <div class="flex justify-end gap-2 pt-3 border-t border-stone-800">
-          <button type="button" onclick="closeTokenModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
-          <button id="token-save-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-sky-400 hover:bg-sky-300">Save &amp; Link</button>
+        <div class="flex items-center justify-between pt-3 border-t border-stone-800">
+          <button type="button" onclick="handleClearToken()" class="px-3 py-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 text-xs">Unlink</button>
+          <div class="flex gap-2">
+            <button type="button" onclick="closeTokenModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
+            <button id="token-save-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-sky-400 hover:bg-sky-300">Save &amp; Link</button>
+          </div>
         </div>
       </form>
     </div>
