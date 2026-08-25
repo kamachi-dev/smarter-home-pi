@@ -82,32 +82,6 @@ export class SmarterHomeSync {
     }
   }
 
-  public async initCameraBroadcast(): Promise<void> {
-    if (!this.supabase) return;
-    const homeId = await this.getLinkedHomeId();
-    if (homeId && (!this.cameraChannel || this.activeCameraHomeId !== homeId)) {
-      if (this.cameraChannel) {
-        this.supabase.removeChannel(this.cameraChannel);
-      }
-      this.activeCameraHomeId = homeId;
-      this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
-        config: { broadcast: { self: false } }
-      });
-      this.cameraChannel.subscribe((status: string) => {
-        console.log(`[SmarterHomeSync] Camera broadcast channel for home [${homeId}]: ${status}`);
-        if (status === 'CHANNEL_ERROR') {
-          setTimeout(() => {
-            if (this.activeCameraHomeId === homeId) {
-              console.log(`[SmarterHomeSync] Retrying camera broadcast channel subscription for home [${homeId}]...`);
-              this.activeCameraHomeId = null;
-              this.initCameraBroadcast();
-            }
-          }, 4000);
-        }
-      });
-    }
-  }
-
   private async syncFamilyMembersFromSupabase(): Promise<void> {
     if (!this.supabase) return;
     try {
@@ -133,7 +107,45 @@ export class SmarterHomeSync {
   private lastLiveFramePush = 0;
   private cameraChannel: any = null;
   private activeCameraHomeId: string | null = null;
+  private isCameraChannelSubscribed = false;
+  private isChannelConnecting = false;
   private lastStateUpsert = 0;
+
+  public async initCameraBroadcast(): Promise<void> {
+    if (!this.supabase || this.isChannelConnecting) return;
+    const homeId = await this.getLinkedHomeId();
+    if (homeId && (!this.cameraChannel || this.activeCameraHomeId !== homeId)) {
+      this.isChannelConnecting = true;
+      if (this.cameraChannel) {
+        try {
+          this.supabase.removeChannel(this.cameraChannel);
+        } catch {}
+      }
+      this.activeCameraHomeId = homeId;
+      this.isCameraChannelSubscribed = false;
+      this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
+        config: { broadcast: { self: false } }
+      });
+      this.cameraChannel.subscribe((status: string) => {
+        this.isChannelConnecting = false;
+        console.log(`[SmarterHomeSync] Camera broadcast channel for home [${homeId}]: ${status}`);
+        if (status === 'SUBSCRIBED') {
+          this.isCameraChannelSubscribed = true;
+        } else {
+          this.isCameraChannelSubscribed = false;
+          if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
+            setTimeout(() => {
+              if (this.activeCameraHomeId === homeId) {
+                console.log(`[SmarterHomeSync] Retrying camera broadcast channel subscription for home [${homeId}]...`);
+                this.activeCameraHomeId = null;
+                this.initCameraBroadcast();
+              }
+            }, 5000);
+          }
+        }
+      });
+    }
+  }
 
   private setupListeners(): void {
     // Immediate push when face detection status changes
@@ -180,42 +192,35 @@ export class SmarterHomeSync {
     if (!config.smarterHomeToken) return false;
 
     const now = Date.now();
-    if (now - this.lastLiveFramePush < 250) return false; // Stream at ~4 FPS
+    if (now - this.lastLiveFramePush < 300) return false; // Stream at ~3.3 FPS
     this.lastLiveFramePush = now;
 
     const base64Image = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
     const isoTimestamp = new Date().toISOString();
 
-    // 1. Direct Supabase Realtime Broadcast (Static site & mobile compatible)
     if (this.supabase) {
       try {
         const homeId = await this.getLinkedHomeId();
         if (homeId) {
-          // Initialize persistent broadcast channel
-          if (!this.cameraChannel || this.activeCameraHomeId !== homeId) {
-            if (this.cameraChannel) {
-              this.supabase.removeChannel(this.cameraChannel);
-            }
-            this.activeCameraHomeId = homeId;
-            this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
-              config: { broadcast: { self: false } }
-            });
-            this.cameraChannel.subscribe((status: string) => {
-              console.log(`[SmarterHomeSync] Camera broadcast channel for home ${homeId}: status = ${status}`);
-            });
+          // Initialize persistent broadcast channel if not present
+          if (!this.cameraChannel && !this.isChannelConnecting) {
+            this.initCameraBroadcast();
           }
 
-          this.cameraChannel.send({
-            type: 'broadcast',
-            event: 'camera_frame',
-            payload: {
-              image: base64Image,
-              faceDetection: faceDetection || null,
-              timestamp: isoTimestamp
-            }
-          }).catch(() => {});
+          // 1. Send via active Realtime WebSocket broadcast if subscribed
+          if (this.isCameraChannelSubscribed && this.cameraChannel) {
+            this.cameraChannel.send({
+              type: 'broadcast',
+              event: 'camera_frame',
+              payload: {
+                image: base64Image,
+                faceDetection: faceDetection || null,
+                timestamp: isoTimestamp
+              }
+            }).catch(() => {});
+          }
 
-          // Upsert latest frame into home_states every 1.5 seconds for instant state sync & static clients
+          // 2. Upsert latest frame into home_states every 1.5 seconds for instant state sync & static clients
           if (now - this.lastStateUpsert > 1500) {
             this.lastStateUpsert = now;
             await this.supabase.from('home_states').upsert({

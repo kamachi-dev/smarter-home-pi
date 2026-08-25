@@ -1,5 +1,5 @@
-fix(realtime): enable public broadcast authorization in realtime.messages and add auto-recovery
+fix(sync): protect Realtime WebSocket broadcast from race conditions and rate limits
 
-- Configure public RLS policy on `realtime.messages` in Supabase to resolve `CHANNEL_ERROR` when subscribing to Realtime Broadcast channels.
-- Add automatic channel subscription recovery with exponential retry in `SmarterHomeSync` upon `CHANNEL_ERROR`.
+- Add `isCameraChannelSubscribed` and `isChannelConnecting` guards in `SmarterHomeSync` to prevent calling `.send()` while channel handshakes are pending.
+- Throttle camera broadcast frame stream to stable ~3.3 FPS and eliminate redundant reconnection loops.
 - Pass TypeScript compilation and keep all source files under 500 lines.
