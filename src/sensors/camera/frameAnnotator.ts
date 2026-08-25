@@ -176,6 +176,13 @@ export class FrameAnnotator {
     // Top status pill
     this.drawFilledRect(data, imgWidth, imgHeight, 8, 8, Math.min(imgWidth - 16, hudStatus.length * 7 + 16), 16, [12, 10, 9, 220]);
     this.drawText(data, imgWidth, imgHeight, hudStatus, 14, 12, statusColor, 1);
+
+    // Live microsecond timecode at bottom-right of frame
+    const now = new Date();
+    const timeStr = now.toISOString().replace('T', ' ').substring(0, 23);
+    const timeW = timeStr.length * 6 + 12;
+    this.drawFilledRect(data, imgWidth, imgHeight, imgWidth - timeW - 8, imgHeight - 24, timeW, 16, [12, 10, 9, 220]);
+    this.drawText(data, imgWidth, imgHeight, timeStr, imgWidth - timeW - 2, imgHeight - 20, [16, 185, 129, 255], 1);
   }
 
   private static drawFilledRect(
