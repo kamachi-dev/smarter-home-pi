@@ -103,6 +103,9 @@ export class SmarterHomeSync {
   }
 
   private lastLiveFramePush = 0;
+  private cameraChannel: any = null;
+  private activeCameraHomeId: string | null = null;
+  private lastStateUpsert = 0;
 
   private setupListeners(): void {
     // Immediate push when face detection status changes
@@ -112,16 +115,17 @@ export class SmarterHomeSync {
       }
     });
 
-    // Listen for processed camera frames and stream live footage to Smarter Home
-    this.registry.on('reading', (reading: SensorReading) => {
-      if (reading.sensorType === 'camera') {
-        const camSensor = this.registry.getSensor(reading.sensorId) as any;
-        const frame = camSensor?.getLatestFrame?.();
-        if (frame) {
-          this.sendLiveFrameToSmarterHome(frame, reading.faceDetection).catch(() => {});
-        }
+    // Listen directly to any active camera sensor for per-frame streaming
+    const bindCamera = (sensor: any) => {
+      if (sensor && sensor.type === 'camera') {
+        sensor.on('frame', (frame: Buffer) => {
+          this.sendLiveFrameToSmarterHome(frame, sensor.getFaceDetection?.()).catch(() => {});
+        });
       }
-    });
+    };
+
+    this.registry.getAllSensors().forEach(bindCamera);
+    this.registry.on('sensor_registered', bindCamera);
   }
 
   private async getLinkedHomeId(): Promise<string | null> {
@@ -148,7 +152,7 @@ export class SmarterHomeSync {
     if (!config.smarterHomeToken) return false;
 
     const now = Date.now();
-    if (now - this.lastLiveFramePush < 300) return false; // Stream at ~3-4 FPS
+    if (now - this.lastLiveFramePush < 250) return false; // Stream at ~4 FPS
     this.lastLiveFramePush = now;
 
     const base64Image = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
@@ -159,18 +163,45 @@ export class SmarterHomeSync {
       try {
         const homeId = await this.getLinkedHomeId();
         if (homeId) {
-          this.supabase
-            .channel(`home-camera-${homeId}`)
-            .send({
-              type: 'broadcast',
-              event: 'camera_frame',
-              payload: {
+          // Initialize persistent broadcast channel
+          if (!this.cameraChannel || this.activeCameraHomeId !== homeId) {
+            if (this.cameraChannel) {
+              this.supabase.removeChannel(this.cameraChannel);
+            }
+            this.activeCameraHomeId = homeId;
+            this.cameraChannel = this.supabase.channel(`home-camera-${homeId}`, {
+              config: { broadcast: { self: false } }
+            });
+            this.cameraChannel.subscribe((status: string) => {
+              console.log(`[SmarterHomeSync] Camera broadcast channel for home ${homeId}: status = ${status}`);
+            });
+          }
+
+          this.cameraChannel.send({
+            type: 'broadcast',
+            event: 'camera_frame',
+            payload: {
+              image: base64Image,
+              faceDetection: faceDetection || null,
+              timestamp: isoTimestamp
+            }
+          }).catch(() => {});
+
+          // Upsert latest frame into home_states every 1.5 seconds for instant state sync & static clients
+          if (now - this.lastStateUpsert > 1500) {
+            this.lastStateUpsert = now;
+            await this.supabase.from('home_states').upsert({
+              home_id: homeId,
+              key: 'camera_feed',
+              value: {
                 image: base64Image,
                 faceDetection: faceDetection || null,
+                updatedAt: now,
                 timestamp: isoTimestamp
-              }
-            })
-            .catch(() => {});
+              },
+              updated_at: isoTimestamp
+            }, { onConflict: 'home_id,key' });
+          }
         }
       } catch {}
     }

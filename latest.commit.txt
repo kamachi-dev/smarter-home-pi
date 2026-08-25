@@ -1,5 +1,6 @@
-fix(dashboard): fix client script template interpolation and expose modal functions globally
+feat(camera): stream per-frame camera feed with persistent broadcast & cloud state upsert
 
-- Fix template string interpolation in `clientScript.ts` and `html.ts` by removing escaped backslashes (`\${script}` -> `${script}`) so all client JavaScript compiles and runs in the browser.
-- Expose `openTokenModal`, `closeTokenModal`, `handleSaveToken`, `handleClearToken`, `openAddSensorModal`, and `openEnrollFaceModal` explicitly on the `window` object.
+- Bind camera sensor directly to `SmarterHomeSync` on frame event so every camera frame is processed and dispatched immediately.
+- Maintain persistent Supabase Realtime broadcast channel (`home-camera-${homeId}`).
+- Periodically upsert latest annotated frame with face recognition boxes into `home_states` (`camera_feed`) for multi-client synchronization.
 - Pass TypeScript compilation and keep all source files under 500 lines.
