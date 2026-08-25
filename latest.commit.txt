@@ -1,5 +1,5 @@
-feat(camera): enhance standby simulated camera rendering with illuminated entryway & face detection
+fix(realtime): enable public broadcast authorization in realtime.messages and add auto-recovery
 
-- Modularize standby frame rendering into dedicated `StandbyFrameGenerator` helper to maintain <= 500 LOC per file.
-- Generate realistic, illuminated Front Porch security camera scene with animated subject, smart lock, wall lighting, and active facial detection.
+- Configure public RLS policy on `realtime.messages` in Supabase to resolve `CHANNEL_ERROR` when subscribing to Realtime Broadcast channels.
+- Add automatic channel subscription recovery with exponential retry in `SmarterHomeSync` upon `CHANNEL_ERROR`.
 - Pass TypeScript compilation and keep all source files under 500 lines.

@@ -95,6 +95,15 @@ export class SmarterHomeSync {
       });
       this.cameraChannel.subscribe((status: string) => {
         console.log(`[SmarterHomeSync] Camera broadcast channel for home [${homeId}]: ${status}`);
+        if (status === 'CHANNEL_ERROR') {
+          setTimeout(() => {
+            if (this.activeCameraHomeId === homeId) {
+              console.log(`[SmarterHomeSync] Retrying camera broadcast channel subscription for home [${homeId}]...`);
+              this.activeCameraHomeId = null;
+              this.initCameraBroadcast();
+            }
+          }, 4000);
+        }
       });
     }
   }
