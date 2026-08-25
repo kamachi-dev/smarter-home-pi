@@ -41,11 +41,20 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
 
     reply.raw.writeHead(200, {
-      'Content-Type': 'multipart/x-mixed-replace; boundary=--frame',
+      'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Connection': 'close',
       'Pragma': 'no-cache'
     });
+
+    const currentFrame = camSensor.getLatestFrame();
+    if (currentFrame) {
+      try {
+        reply.raw.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${currentFrame.length}\r\n\r\n`);
+        reply.raw.write(currentFrame);
+        reply.raw.write('\r\n');
+      } catch {}
+    }
 
     const unsubscribe = camSensor.subscribeStream((frame: Buffer) => {
       if (reply.raw.writableEnded || reply.raw.destroyed) {

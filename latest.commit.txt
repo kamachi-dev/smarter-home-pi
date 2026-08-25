@@ -1,5 +1,5 @@
-fix(dashboard): resolve camera feed visibility and client script execution in Pi UI
+fix(camera): correct MJPEG stream boundary and stream chunk parsing
 
-- Fix string escape syntax error in `telemetryScript.ts` to allow client-side initialization and timecode ticker to run immediately.
-- Remove `opacity-0` and opaque canvas background in `html.ts` and `cameraScript.ts` so live hardware MJPEG stream `/api/camera/stream` is directly visible with dynamic HUD bounding reticles.
+- Fix multipart MJPEG stream boundary header (`boundary=frame`) in `/api/camera/stream` and immediately dispatch latest frame on connection.
+- Refactor MJPEG stream chunk parser in `CameraSensor` with byte-aligned SOI (`0xff 0xd8`) and EOI (`0xff 0xd9`) boundary slicing.
 - Pass TypeScript compilation and keep all source files under 500 lines.

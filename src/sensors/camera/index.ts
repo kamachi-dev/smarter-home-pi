@@ -100,12 +100,17 @@ export class CameraSensor extends BaseSensor {
       {
         name: 'rpicam-vid (RPi OS Bookworm / Bullseye CSI Camera)',
         cmd: 'rpicam-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '10', '--quality', '50', '-o', '-']
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
       },
       {
         name: 'libcamera-vid (Standard libcamera CSI Camera)',
         cmd: 'libcamera-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '10', '--quality', '50', '-o', '-']
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+      },
+      {
+        name: 'raspivid (Legacy RPi Camera)',
+        cmd: 'raspivid',
+        args: ['-n', '-t', '0', '-cd', 'MJPEG', '-w', '640', '-h', '480', '-fps', '15', '-o', '-']
       }
     ];
 
@@ -114,7 +119,7 @@ export class CameraSensor extends BaseSensor {
       strategies.push({
         name: `ffmpeg ${vdev} (V4L2 Video Device)`,
         cmd: 'ffmpeg',
-        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '10', '-i', vdev, '-q:v', '6', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
+        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', vdev, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
       });
     }
 
@@ -160,27 +165,34 @@ export class CameraSensor extends BaseSensor {
     if (!proc.stdout) return;
     let buffer = Buffer.alloc(0);
     let receivedAnyFrame = false;
-    let frameCount = 0;
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
 
       while (true) {
         const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]));
-        if (soi === -1) break;
+        if (soi === -1) {
+          if (buffer.length > 200000) buffer = Buffer.alloc(0);
+          break;
+        }
+        if (soi > 0) {
+          buffer = buffer.subarray(soi);
+        }
 
-        const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), soi + 2);
-        if (eoi === -1) break;
+        const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
+        if (eoi === -1) {
+          if (buffer.length > 500000) buffer = Buffer.alloc(0);
+          break;
+        }
 
-        const jpegFrame = buffer.subarray(soi, eoi + 2);
+        const jpegFrame = buffer.subarray(0, eoi + 2);
+        buffer = buffer.subarray(eoi + 2);
+
         if (!receivedAnyFrame) {
           receivedAnyFrame = true;
           console.log(`[CameraSensor] ✅ SUCCESS: Live hardware frames streaming successfully via [${strategyName}]!`);
         }
-        frameCount++;
         this.onNewCameraFrame(jpegFrame);
-
-        buffer = buffer.subarray(eoi + 2);
       }
     });
 

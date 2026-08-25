@@ -66,7 +66,7 @@ export class FrameAnnotator {
     quality: number = 50
   ): Buffer {
     try {
-      const decoded = jpeg.decode(imageBuffer, { useTArray: true });
+      const decoded = jpeg.decode(imageBuffer, { useTArray: true, maxMemoryUsageInMB: 512 });
       const { width, height, data } = decoded;
 
       // Extract all faces to draw
