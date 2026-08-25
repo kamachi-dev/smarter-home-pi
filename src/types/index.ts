@@ -36,6 +36,18 @@ export interface TemperatureReading extends BaseReading {
   humidityPct?: number;
 }
 
+export interface DetectedFace {
+  box: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  status: 'recognized' | 'unknown';
+  person: string | null;
+  confidence: number;
+}
+
 export interface FaceDetectionPayload {
   detected: boolean;                      // true if someone is detected
   status: 'recognized' | 'unknown' | 'none'; // recognition status
@@ -48,6 +60,7 @@ export interface FaceDetectionPayload {
     width: number;
     height: number;
   };
+  faces?: DetectedFace[];
 }
 
 export interface CameraReading extends BaseReading {

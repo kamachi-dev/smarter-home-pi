@@ -5,6 +5,7 @@ import jpeg from 'jpeg-js';
 import { BaseSensor } from '../base.js';
 import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/index.js';
 import { FaceRecognitionEngine } from './faceRecognition.js';
+import { FrameAnnotator } from './frameAnnotator.js';
 import { GpioManager } from '../../hardware/gpio.js';
 
 export class CameraSensor extends BaseSensor {
@@ -198,22 +199,63 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Clean, minimal standby buffer
+   * Generates simulation camera footage when hardware camera is not physically attached
    */
   private startStandbyFrameGenerator(): void {
     if (this.simulationInterval) return;
     const width = 640;
     const height = 480;
+    let step = 0;
 
-    const generateMinimalFrame = (): Buffer => {
+    const generateSimulatedFrame = (): Buffer => {
+      step += 0.05;
       const frameData = Buffer.alloc(width * height * 4);
-      for (let i = 0; i < width * height * 4; i += 4) {
-        frameData[i] = 20;     // R
-        frameData[i + 1] = 22; // G
-        frameData[i + 2] = 25; // B
-        frameData[i + 3] = 255;
+
+      // Gradient background (security camera night/indoor ambiance)
+      for (let y = 0; y < height; y++) {
+        const yNorm = y / height;
+        const r = Math.round(20 + yNorm * 10);
+        const g = Math.round(22 + yNorm * 12);
+        const b = Math.round(26 + yNorm * 15);
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          frameData[idx] = r;
+          frameData[idx + 1] = g;
+          frameData[idx + 2] = b;
+          frameData[idx + 3] = 255;
+        }
       }
-      const encoded = jpeg.encode({ data: frameData, width, height }, 50);
+
+      // Draw door / entryway frame in center
+      const doorX = Math.round(width / 2 - 90);
+      const doorY = 70;
+      const doorW = 180;
+      const doorH = 340;
+
+      for (let y = doorY; y < doorY + doorH; y++) {
+        for (let x = doorX; x < doorX + doorW; x++) {
+          const idx = (y * width + x) * 4;
+          frameData[idx] = 14;
+          frameData[idx + 1] = 16;
+          frameData[idx + 2] = 20;
+        }
+      }
+
+      // Light cone from top
+      for (let y = 0; y < height; y++) {
+        const halfW = 40 + (y / height) * 220;
+        const left = Math.max(0, Math.round(width / 2 - halfW));
+        const right = Math.min(width, Math.round(width / 2 + halfW));
+        for (let x = left; x < right; x++) {
+          const idx = (y * width + x) * 4;
+          const alpha = 0.08 * (1 - y / height);
+          frameData[idx] = Math.min(255, Math.round(frameData[idx] + 254 * alpha));
+          frameData[idx + 1] = Math.min(255, Math.round(frameData[idx + 1] + 240 * alpha));
+          frameData[idx + 2] = Math.min(255, Math.round(frameData[idx + 2] + 200 * alpha));
+        }
+      }
+
+      const encoded = jpeg.encode({ data: frameData, width, height }, 65);
       return encoded.data;
     };
 
@@ -222,19 +264,65 @@ export class CameraSensor extends BaseSensor {
         if (this.simulationInterval) clearInterval(this.simulationInterval);
         return;
       }
-      this.onNewCameraFrame(generateMinimalFrame());
+      this.onNewCameraFrame(generateSimulatedFrame());
     }, 200);
   }
 
-  private onNewCameraFrame(frame: Buffer): void {
-    this.latestFrame = frame;
-    this.emit('frame', frame);
+  /**
+   * Processes each camera frame by running facial recognition and placing
+   * recognition squares before broadcasting to the live footage stream.
+   */
+  private onNewCameraFrame(rawFrame: Buffer): void {
+    // Annotate frame with active facial recognition squares
+    const annotated = FrameAnnotator.annotateFrame(rawFrame, this.currentDetection);
+    this.latestFrame = annotated;
+    this.emit('frame', annotated);
 
     for (const listener of Array.from(this.streamListeners)) {
       try {
-        listener(frame);
+        listener(annotated);
       } catch {}
     }
+
+    // Trigger asynchronous face detection on raw frame if engine is idle
+    if (!this.isProcessingFace) {
+      this.processFaceRecognitionAsync(rawFrame);
+    }
+  }
+
+  private async processFaceRecognitionAsync(frame: Buffer): Promise<void> {
+    this.isProcessingFace = true;
+    try {
+      const detection = await this.faceEngine.recognizeFrame(frame);
+      this.currentDetection = detection;
+      this.emit('face_detection', detection);
+    } catch (err) {
+      console.error('[CameraSensor] Face recognition error:', (err as Error).message);
+    } finally {
+      this.isProcessingFace = false;
+    }
+  }
+
+  /**
+   * Ingests an external frame (e.g. from browser webcam or external stream),
+   * executes facial recognition, places recognition squares, and updates live footage.
+   */
+  public async ingestFrame(frameBuffer: Buffer): Promise<{ detection: FaceDetectionPayload; annotatedFrame: Buffer }> {
+    const detection = await this.faceEngine.recognizeFrame(frameBuffer);
+    this.currentDetection = detection;
+    this.emit('face_detection', detection);
+
+    const annotatedFrame = FrameAnnotator.annotateFrame(frameBuffer, detection);
+    this.latestFrame = annotatedFrame;
+    this.emit('frame', annotatedFrame);
+
+    for (const listener of Array.from(this.streamListeners)) {
+      try {
+        listener(annotatedFrame);
+      } catch {}
+    }
+
+    return { detection, annotatedFrame };
   }
 
   /**
@@ -244,19 +332,9 @@ export class CameraSensor extends BaseSensor {
     if (this.recognitionTimer) return;
 
     this.recognitionTimer = setInterval(async () => {
-      if (!this.isRunning || this.isProcessingFace) return;
-      this.isProcessingFace = true;
-
-      try {
-        const detection = await this.faceEngine.recognizeFrame(this.latestFrame || undefined);
-        this.currentDetection = detection;
-        this.emit('face_detection', detection);
-      } catch (err) {
-        console.error('[CameraSensor] Face recognition error:', (err as Error).message);
-      } finally {
-        this.isProcessingFace = false;
-      }
-    }, 1200);
+      if (!this.isRunning || this.isProcessingFace || !this.latestFrame) return;
+      await this.processFaceRecognitionAsync(this.latestFrame);
+    }, 1000);
   }
 
   public getLatestFrame(): Buffer | null {

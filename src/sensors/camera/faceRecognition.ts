@@ -241,7 +241,8 @@ export class FaceRecognitionEngine {
         status: 'none',
         person: null,
         confidence: 0,
-        timestamp
+        timestamp,
+        faces: []
       };
     }
 
@@ -252,66 +253,79 @@ export class FaceRecognitionEngine {
         status: 'none',
         person: null,
         confidence: 0,
-        timestamp
+        timestamp,
+        faces: []
       };
     }
 
     try {
-      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-      const detection = await faceapi.detectSingleFace(tensor, detectorOptions)
+      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 });
+      const detections = await faceapi.detectAllFaces(tensor, detectorOptions)
         .withFaceLandmarks(true)
-        .withFaceDescriptor();
+        .withFaceDescriptors();
 
-      if (!detection) {
+      if (!detections || detections.length === 0) {
         return {
           detected: false,
           status: 'none',
           person: null,
           confidence: 0,
-          timestamp
+          timestamp,
+          faces: []
         };
       }
 
-      const box = {
-        x: Math.round(detection.detection.box.x),
-        y: Math.round(detection.detection.box.y),
-        width: Math.round(detection.detection.box.width),
-        height: Math.round(detection.detection.box.height)
-      };
+      const detectedFaces: any[] = [];
+      let anyRecognized = false;
+      let primaryPerson: string | null = null;
+      let primaryConfidence = 0;
 
-      if (this.faceMatcher && detection.descriptor) {
-        const bestMatch = this.faceMatcher.findBestMatch(detection.descriptor);
-        const isMatch = bestMatch.label !== 'unknown' && bestMatch.distance <= this.matchDistanceThreshold;
-        const confidence = Math.round(Math.max(0.5, 1 - bestMatch.distance) * 100) / 100;
+      for (const det of detections) {
+        const box = {
+          x: Math.round(det.detection.box.x),
+          y: Math.round(det.detection.box.y),
+          width: Math.round(det.detection.box.width),
+          height: Math.round(det.detection.box.height)
+        };
+
+        let isMatch = false;
+        let personName = 'Unknown Person';
+        let conf = Math.round(det.detection.score * 100) / 100;
+
+        if (this.faceMatcher && det.descriptor) {
+          const bestMatch = this.faceMatcher.findBestMatch(det.descriptor);
+          if (bestMatch.label !== 'unknown' && bestMatch.distance <= this.matchDistanceThreshold) {
+            isMatch = true;
+            personName = bestMatch.label;
+            conf = Math.round(Math.max(0.5, 1 - bestMatch.distance) * 100) / 100;
+          }
+        }
 
         if (isMatch) {
-          return {
-            detected: true,
-            status: 'recognized',
-            person: bestMatch.label,
-            confidence,
-            timestamp,
-            box
-          };
-        } else {
-          return {
-            detected: true,
-            status: 'unknown',
-            person: 'Unknown Person',
-            confidence: Math.round(detection.detection.score * 100) / 100,
-            timestamp,
-            box
-          };
+          anyRecognized = true;
+          if (!primaryPerson) {
+            primaryPerson = personName;
+            primaryConfidence = conf;
+          }
         }
+
+        detectedFaces.push({
+          box,
+          status: isMatch ? 'recognized' : 'unknown',
+          person: isMatch ? personName : 'Unknown Person',
+          confidence: conf
+        });
       }
 
+      const primary = detectedFaces[0];
       return {
         detected: true,
-        status: 'unknown',
-        person: 'Unknown Person',
-        confidence: Math.round(detection.detection.score * 100) / 100,
+        status: anyRecognized ? 'recognized' : 'unknown',
+        person: primaryPerson || primary.person,
+        confidence: primaryPerson ? primaryConfidence : primary.confidence,
         timestamp,
-        box
+        box: primary.box,
+        faces: detectedFaces
       };
 
     } catch (err) {
@@ -321,7 +335,8 @@ export class FaceRecognitionEngine {
         status: 'none',
         person: null,
         confidence: 0,
-        timestamp
+        timestamp,
+        faces: []
       };
     } finally {
       tensor.dispose();

@@ -80,6 +80,32 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     reply.type('image/jpeg').send(frame);
   });
 
+  // Ingest camera frame and run facial recognition
+  server.post<{
+    Body: {
+      image: string; // Base64 data URL or raw base64 string
+    };
+  }>('/api/camera/frame', async (request, reply) => {
+    const { image } = request.body || {};
+    if (!image) {
+      return reply.code(400).send({ error: 'Image data is required.' });
+    }
+
+    const camSensor = registry.getAllSensors().find(s => s.type === 'camera') as any;
+    if (!camSensor) {
+      return reply.code(404).send({ error: 'Camera sensor is not registered.' });
+    }
+
+    try {
+      const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+      const frameBuffer = Buffer.from(base64Data, 'base64');
+      const result = await camSensor.ingestFrame(frameBuffer);
+      return { success: true, detection: result.detection };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
   // Get all registered sensors
   server.get('/api/sensors', async () => {
     return {

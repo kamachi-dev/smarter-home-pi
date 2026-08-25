@@ -39,6 +39,20 @@ export const wsRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
       }));
     }
 
+    socket.on('message', async (raw: any) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'camera_frame' && msg.image) {
+          const camSensor = registry.getAllSensors().find(s => s.type === 'camera') as any;
+          if (camSensor && typeof camSensor.ingestFrame === 'function') {
+            const base64Data = msg.image.replace(/^data:image\/\w+;base64,/, '');
+            const frameBuffer = Buffer.from(base64Data, 'base64');
+            await camSensor.ingestFrame(frameBuffer);
+          }
+        }
+      } catch {}
+    });
+
     socket.on('close', () => {
       clients.delete(socket);
     });
