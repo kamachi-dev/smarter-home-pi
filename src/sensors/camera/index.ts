@@ -100,12 +100,12 @@ export class CameraSensor extends BaseSensor {
       {
         name: 'rpicam-vid (RPi OS Bookworm / Bullseye CSI Camera)',
         cmd: 'rpicam-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '10', '--quality', '50', '-o', '-']
       },
       {
         name: 'libcamera-vid (Standard libcamera CSI Camera)',
         cmd: 'libcamera-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '10', '--quality', '50', '-o', '-']
       }
     ];
 
@@ -114,7 +114,7 @@ export class CameraSensor extends BaseSensor {
       strategies.push({
         name: `ffmpeg ${vdev} (V4L2 Video Device)`,
         cmd: 'ffmpeg',
-        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', vdev, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
+        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '10', '-i', vdev, '-q:v', '6', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
       });
     }
 

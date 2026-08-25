@@ -1,5 +1,5 @@
-perf(camera): optimize hardware JPEG encoding quality and accelerate state synchronization
+fix(camera): hardware compression and broadcast payload boundary protection
 
-- Optimize FrameAnnotator JPEG encoding quality to 50 for efficient, lightweight network transmission under Supabase WebSocket payload limits.
-- Accelerate `home_states.camera_feed` upsert frequency to 800ms for continuous streaming fallback.
+- Add `--quality 50` hardware JPEG compression and 10 FPS to `rpicam-vid` and `libcamera-vid` to reduce hardware frame size and CPU utilization.
+- Add payload boundary protection (`< 90KB`) and safe error-handling in `sendLiveFrameToSmarterHome` to keep Supabase Realtime broadcast channels permanently connected.
 - Pass TypeScript compilation and keep all source files under 500 lines.
