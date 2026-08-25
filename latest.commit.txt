@@ -1,6 +1,5 @@
-feat(dashboard): add prominent token configuration card and modal controls
+fix(dashboard): fix client script template interpolation and expose modal functions globally
 
-- Add a dedicated "Smarter Home Cloud Link" panel card in the Raspberry Pi controller dashboard with live connection status and active token indicators.
-- Add "Configure Token" and top-bar "Link Home Token" triggers to open the token configuration modal.
-- Add "Unlink / Clear Token" button inside the modal to easily disconnect the Pi from the cloud.
+- Fix template string interpolation in `clientScript.ts` and `html.ts` by removing escaped backslashes (`\${script}` -> `${script}`) so all client JavaScript compiles and runs in the browser.
+- Expose `openTokenModal`, `closeTokenModal`, `handleSaveToken`, `handleClearToken`, `openAddSensorModal`, and `openEnrollFaceModal` explicitly on the `window` object.
 - Pass TypeScript compilation and keep all source files under 500 lines.

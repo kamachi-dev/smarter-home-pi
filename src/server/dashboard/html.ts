@@ -415,7 +415,7 @@ export function getDashboardHtmlTemplate(script: string): string {
   </div>
 
   <script>
-    \${script}
+    ${script}
   </script>
 </body>
 </html>

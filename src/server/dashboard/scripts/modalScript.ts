@@ -216,5 +216,18 @@ export const modalScript = `
         alert('Failed: ' + err.message);
       }
     }
+
+    window.openTokenModal = openTokenModal;
+    window.closeTokenModal = closeTokenModal;
+    window.handleSaveToken = handleSaveToken;
+    window.handleClearToken = handleClearToken;
+    window.openAddSensorModal = openAddSensorModal;
+    window.closeAddSensorModal = closeAddSensorModal;
+    window.openEnrollFaceModal = openEnrollFaceModal;
+    window.closeEnrollFaceModal = closeEnrollFaceModal;
+    window.triggerManualSync = triggerManualSync;
+    window.handleTrainFace = handleTrainFace;
+    window.handlePhotoSelection = handlePhotoSelection;
+    window.removeFace = removeFace;
 `;
 
