@@ -8,9 +8,11 @@ import { FaceRecognitionEngine } from './faceRecognition.js';
 import { FrameAnnotator } from './frameAnnotator.js';
 import { StandbyFrameGenerator } from './standbyGenerator.js';
 import { GpioManager } from '../../hardware/gpio.js';
+import { TapoCameraService } from './tapoClient.js';
 
 export class CameraSensor extends BaseSensor {
   private faceEngine: FaceRecognitionEngine;
+  private tapoService: TapoCameraService;
   private cameraProcess: ChildProcess | null = null;
   private latestFrame: Buffer | null = null;
   private isProcessingFace: boolean = false;
@@ -30,10 +32,16 @@ export class CameraSensor extends BaseSensor {
   constructor(config: SensorConfig) {
     super(config);
     this.faceEngine = FaceRecognitionEngine.getInstance();
+    this.tapoService = new TapoCameraService({
+      host: config.options?.tapoIp || config.options?.ip,
+      user: config.options?.tapoUser || config.options?.user,
+      password: config.options?.tapoPassword || config.options?.password,
+    });
   }
 
   public async init(): Promise<void> {
     console.log(`[CameraSensor] Initializing Camera Pipeline (${this.config.name})...`);
+    await this.tapoService.init();
     this.startCameraPipeline();
   }
 
@@ -61,16 +69,9 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Discovers and binds to attached physical camera hardware
+   * Discovers and binds to attached camera hardware (Tapo IP Camera or RPi physical hardware)
    */
   private startCameraPipeline(): void {
-    const isLinux = GpioManager.getInstance().isHardwareMode();
-    if (!isLinux) {
-      console.log('[CameraSensor] Non-Linux host detected; using standby buffer');
-      this.startStandbyFrameGenerator();
-      return;
-    }
-
     this.scanAndLogHardwareVideoDevices();
     this.tryNextCaptureStrategy();
   }
@@ -96,7 +97,13 @@ export class CameraSensor extends BaseSensor {
       }
     } catch {}
 
+    const tapoRtspUrl = this.tapoService.getRtspStreamUrl('stream1');
     const strategies: Array<{ name: string; cmd: string; args: string[] }> = [
+      {
+        name: `Tapo IP Camera RTSP Stream (${this.tapoService.host})`,
+        cmd: 'ffmpeg',
+        args: ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', tapoRtspUrl, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-r', '15', '-']
+      },
       {
         name: 'rpicam-vid (RPi OS Bookworm / Bullseye CSI Camera)',
         cmd: 'rpicam-vid',
@@ -324,6 +331,10 @@ export class CameraSensor extends BaseSensor {
 
   public getFaceDetection(): FaceDetectionPayload {
     return this.currentDetection;
+  }
+
+  public getTapoService(): TapoCameraService {
+    return this.tapoService;
   }
 
   public async cleanup(): Promise<void> {

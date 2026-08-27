@@ -1,5 +1,8 @@
-fix(sync): continuous camera broadcast ticker and sensor event registration
+feat(camera): integrate tapo-camera-client and prioritize Tapo RTSP stream
 
-- Fix missing `sensor_registered` emission in `SensorRegistry.registerSensor` to ensure event listeners attach properly.
-- Add autonomous 300ms camera stream broadcast loop in `SmarterHomeSync.startSyncLoop` to guarantee continuous, uninterrupted live frame transmission to Supabase on startup.
-- Pass TypeScript compilation with 0 errors and maintain all source files under 500 lines.
+- Install `tapo-camera-client` dependency and configure `TapoCameraService` wrapper for API controls.
+- Add default Tapo credentials (IP: 192.168.68.101, User: joaquinphillipsoriano25@gmail.com, Password: September--25) to `env.ts` and `.env.example`.
+- Update `CameraSensor` (`src/sensors/camera/index.ts`) to prioritize Tapo RTSP video stream as capture strategy #1 ahead of RPi local hardware streams.
+- Implement URL encoding for RTSP credentials (`joaquinphillipsoriano25%40gmail.com`) and graceful fallback to local physical camera or simulation mode.
+- Add automated unit tests in `src/sensors/camera/__tests__/tapoClient.test.ts` and `"test"` script in `package.json`.
+- Validate build with `npm run build` (`tsc`) ensuring 100% type safety and modular files under 500 lines.

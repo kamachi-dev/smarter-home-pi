@@ -17,6 +17,9 @@ export interface AppConfig {
   enrolledFacesPath: string;
   modelsPath: string;
   isSimulatedHardware: boolean;
+  tapoCameraIp: string;
+  tapoCameraUser: string;
+  tapoCameraPassword: string;
 }
 
 const dataDir = path.resolve(process.cwd(), 'data');
@@ -54,6 +57,9 @@ export const config: AppConfig = {
   enrolledFacesPath: process.env.ENROLLED_FACES_PATH || path.resolve(dataDir, 'enrolled_faces.json'),
   modelsPath: process.env.MODELS_PATH || path.resolve(process.cwd(), 'models'),
   isSimulatedHardware: process.env.FORCE_SIMULATION === 'true' || process.platform !== 'linux',
+  tapoCameraIp: process.env.TAPO_CAMERA_IP || '192.168.68.101',
+  tapoCameraUser: process.env.TAPO_CAMERA_USER || 'joaquinphillipsoriano25@gmail.com',
+  tapoCameraPassword: process.env.TAPO_CAMERA_PASSWORD || 'September--25',
 };
 
 export function saveHubConfig(token: string, apiUrl?: string): void {
