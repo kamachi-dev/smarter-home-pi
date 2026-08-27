@@ -29,12 +29,14 @@ export const cameraScript = `
 
     function handleStreamLoad() {
       isStreamLoaded = true;
-      document.getElementById('cam-fps-badge').textContent = '640x480 • 30 FPS • PROCESSED STREAM';
+      const hudLabel = document.getElementById('cam-hud-label');
+      if (hudLabel) hudLabel.textContent = 'TAPO IP CAMERA (192.168.68.101) • LIVE RTSP';
+      document.getElementById('cam-fps-badge').textContent = '640x480 • 15 FPS • TAPO RTSP STREAM';
     }
 
     function handleStreamError(img) {
       isStreamLoaded = false;
-      document.getElementById('cam-fps-badge').textContent = '640x480 • 30 FPS • ACTIVE FEED';
+      document.getElementById('cam-fps-badge').textContent = '640x480 • RECONNECTING TAPO STREAM...';
       setTimeout(() => {
         if (!isWebcamActive) {
           img.src = '/api/camera/stream?t=' + Date.now();
@@ -157,4 +159,9 @@ export const cameraScript = `
       }
       render();
     }
+
+    window.handleStreamLoad = handleStreamLoad;
+    window.handleStreamError = handleStreamError;
+    window.initAutoWebcam = initAutoWebcam;
+    window.startCanvasRenderLoop = startCanvasRenderLoop;
 `;

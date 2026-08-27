@@ -16,7 +16,6 @@ export const telemetryScript = `
       try { await fetchStatus(); } catch (e) {}
       try { await fetchPins(); } catch (e) {}
       try { await fetchFaces(); } catch (e) {}
-      try { initAutoWebcam(); } catch (e) {}
     }
 
     async function fetchStatus() {
@@ -149,8 +148,14 @@ export const telemetryScript = `
         item.innerHTML = '<div>' +
           '<div class="text-xs font-bold text-stone-200">' + f.name + '</div>' +
           '<div class="text-[10px] text-stone-500">' + (f.notes || 'Household Member') + '</div>' +
-        '</div>' +
-        '<button onclick="removeFace(\'' + f.id + '\')" class="text-stone-600 hover:text-red-400 text-xs px-2 py-1">&times;</button>';
+        '</div>';
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'text-stone-600 hover:text-red-400 text-xs px-2 py-1';
+        delBtn.innerHTML = '&times;';
+        delBtn.onclick = () => removeFace(f.id);
+        item.appendChild(delBtn);
+
         list.appendChild(item);
       });
     }
@@ -217,5 +222,14 @@ export const telemetryScript = `
         badge.textContent = 'MONITORING';
         badge.className = 'text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400';
       }
+    }
+
+    window.state = state;
+    window.init = init;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
     }
 `;

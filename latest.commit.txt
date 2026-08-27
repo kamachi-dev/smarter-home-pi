@@ -1,8 +1,5 @@
-feat(camera): integrate tapo-camera-client and prioritize Tapo RTSP stream
+fix(dashboard): bind camera stream display to Tapo IP camera RTSP feed
 
-- Install `tapo-camera-client` dependency and configure `TapoCameraService` wrapper for API controls.
-- Add default Tapo credentials (IP: 192.168.68.101, User: joaquinphillipsoriano25@gmail.com, Password: September--25) to `env.ts` and `.env.example`.
-- Update `CameraSensor` (`src/sensors/camera/index.ts`) to prioritize Tapo RTSP video stream as capture strategy #1 ahead of RPi local hardware streams.
-- Implement URL encoding for RTSP credentials (`joaquinphillipsoriano25%40gmail.com`) and graceful fallback to local physical camera or simulation mode.
-- Add automated unit tests in `src/sensors/camera/__tests__/tapoClient.test.ts` and `"test"` script in `package.json`.
-- Validate build with `npm run build` (`tsc`) ensuring 100% type safety and modular files under 500 lines.
+- Update dashboard HUD header and FPS badges in `html.ts` and `cameraScript.ts` to display "TAPO IP CAMERA (192.168.68.101) • LIVE RTSP".
+- Disable automatic local browser webcam capture in `telemetryScript.ts` to prevent browser media devices from overriding the server Tapo camera stream.
+- Re-verify TypeScript build (`npm run build`) and test suite (`npm test`) with 7/7 tests passing.

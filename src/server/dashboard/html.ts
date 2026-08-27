@@ -171,7 +171,7 @@ export function getDashboardHtmlTemplate(script: string): string {
               <!-- Live HUD overlay -->
               <div class="absolute top-2.5 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-emerald-400 font-bold z-10">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span id="cam-hud-label">RPi CAMERA (CSI/USB) • LIVE FEED</span>
+                <span id="cam-hud-label">TAPO IP CAMERA (192.168.68.101) • LIVE RTSP</span>
               </div>
 
               <div class="absolute top-2.5 right-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-stone-300 z-10">
@@ -179,7 +179,7 @@ export function getDashboardHtmlTemplate(script: string): string {
               </div>
 
               <div class="absolute bottom-2.5 left-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[8.5px] font-mono text-stone-400 z-10">
-                <span id="cam-fps-badge">640x480 • 15 FPS • HARDWARE</span>
+                <span id="cam-fps-badge">640x480 • 15 FPS • TAPO RTSP STREAM</span>
               </div>
             </div>
 
