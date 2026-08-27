@@ -1,6 +1,7 @@
-fix(camera): add rtsp_flags prefer_tcp and credential case-insensitive fallbacks for 401 resolution
+perf(camera): optimize stream pipeline to eliminate delay and display latest frames
 
-- Add `-rtsp_flags prefer_tcp` to all TCP capture strategies in `CameraSensor` for reliable Digest authentication challenge negotiation.
-- Add username case fallback variants (`CapstoneCam2`, `capstonecam2`, `CapstoneCam`) in capture strategies.
-- Add `getRtspStreamUrlWithCustomUser` helper to `TapoCameraService`.
-- Re-verify build with `npm run build` (`tsc`) and unit tests with `npm test` (7/7 tests passing).
+- Add `-avioflags direct`, `-fflags nobuffer+discardcorrupt`, and `-max_delay 500000` to FFmpeg capture pipeline in `CameraSensor` to bypass input/demuxer buffer buildup.
+- Reduce probe/analysis limits (`-analyzeduration 1000000`, `-probesize 1000000`) for low-latency live streaming.
+- Ensure instantaneous real-time MJPEG chunk dispatching to web clients.
+- Validate type safety with `npm run build` and run test suite with `npm test`.
+
