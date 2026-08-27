@@ -1,5 +1,6 @@
-chore(config): set Tapo camera default username to CapstoneCam2
+fix(camera): add rtsp_flags prefer_tcp and credential case-insensitive fallbacks for 401 resolution
 
-- Update `tapoCameraUser` default in `src/config/env.ts` and `.env.example` to `CapstoneCam2`.
-- Update unit tests in `src/sensors/camera/__tests__/tapoClient.test.ts`.
-- Verify build with `npm run build` (`tsc`) and unit test suite with `npm test` (7/7 tests passing).
+- Add `-rtsp_flags prefer_tcp` to all TCP capture strategies in `CameraSensor` for reliable Digest authentication challenge negotiation.
+- Add username case fallback variants (`CapstoneCam2`, `capstonecam2`, `CapstoneCam`) in capture strategies.
+- Add `getRtspStreamUrlWithCustomUser` helper to `TapoCameraService`.
+- Re-verify build with `npm run build` (`tsc`) and unit tests with `npm test` (7/7 tests passing).

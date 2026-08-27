@@ -249,24 +249,43 @@ export class CameraSensor extends BaseSensor {
           buffer = buffer.subarray(soi);
         }
 
-        const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
-        if (eoi === -1) {
-          if (buffer.length > 5000000) buffer = Buffer.alloc(0);
-          break;
-        }
+        // Look for the next SOI to extract complete unbroken JPEG frame
+        const nextSoi = buffer.indexOf(Buffer.from([0xff, 0xd8]), 2);
+        if (nextSoi !== -1) {
+          const jpegFrame = buffer.subarray(0, nextSoi);
+          buffer = buffer.subarray(nextSoi);
 
-        const jpegFrame = buffer.subarray(0, eoi + 2);
-        buffer = buffer.subarray(eoi + 2);
-
-        if (!receivedAnyFrame) {
-          receivedAnyFrame = true;
-          if (this.simulationInterval) {
-            clearInterval(this.simulationInterval);
-            this.simulationInterval = null;
+          if (!receivedAnyFrame) {
+            receivedAnyFrame = true;
+            if (this.simulationInterval) {
+              clearInterval(this.simulationInterval);
+              this.simulationInterval = null;
+            }
+            console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
           }
-          console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
+          this.onNewCameraFrame(jpegFrame);
+          continue;
         }
-        this.onNewCameraFrame(jpegFrame);
+
+        // If no next SOI yet, check for EOI followed by bytes
+        const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
+        if (eoi !== -1 && buffer.length > eoi + 4) {
+          const jpegFrame = buffer.subarray(0, eoi + 2);
+          buffer = buffer.subarray(eoi + 2);
+
+          if (!receivedAnyFrame) {
+            receivedAnyFrame = true;
+            if (this.simulationInterval) {
+              clearInterval(this.simulationInterval);
+              this.simulationInterval = null;
+            }
+            console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
+          }
+          this.onNewCameraFrame(jpegFrame);
+          continue;
+        }
+
+        break;
       }
     });
 
@@ -303,18 +322,15 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Processes each camera frame by running facial recognition and placing
-   * recognition squares before broadcasting to the live footage stream.
+   * Processes each camera frame in real-time and broadcasts to stream subscribers.
    */
   private onNewCameraFrame(rawFrame: Buffer): void {
-    // Annotate frame with active facial recognition squares
-    const annotated = FrameAnnotator.annotateFrame(rawFrame, this.currentDetection);
-    this.latestFrame = annotated;
-    this.emit('frame', annotated);
+    this.latestFrame = rawFrame;
+    this.emit('frame', rawFrame);
 
     for (const listener of Array.from(this.streamListeners)) {
       try {
-        listener(annotated);
+        listener(rawFrame);
       } catch {}
     }
 
