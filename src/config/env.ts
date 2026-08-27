@@ -58,7 +58,7 @@ export const config: AppConfig = {
   modelsPath: process.env.MODELS_PATH || path.resolve(process.cwd(), 'models'),
   isSimulatedHardware: process.env.FORCE_SIMULATION === 'true' || process.platform !== 'linux',
   tapoCameraIp: process.env.TAPO_CAMERA_IP || '192.168.68.101',
-  tapoCameraUser: process.env.TAPO_CAMERA_USER || 'CapstoneCam',
+  tapoCameraUser: process.env.TAPO_CAMERA_USER || 'CapstoneCam2',
   tapoCameraPassword: process.env.TAPO_CAMERA_PASSWORD || 'OliverSoriano',
 };
 
