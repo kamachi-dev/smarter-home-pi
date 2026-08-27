@@ -86,58 +86,86 @@ export class CameraSensor extends BaseSensor {
   }
 
   private tryNextCaptureStrategy(): void {
-    // Find available video devices
-    let v4lDevices = ['/dev/video0'];
-    try {
-      if (fs.existsSync('/dev')) {
-        const found = fs.readdirSync('/dev')
-          .filter(f => f.startsWith('video'))
-          .map(f => `/dev/${f}`);
-        if (found.length > 0) v4lDevices = found;
-      }
-    } catch {}
-
-    const tapoRtspUrl = this.tapoService.getRtspStreamUrl('stream1');
     const strategies: Array<{ name: string; cmd: string; args: string[] }> = [
       {
-        name: `Tapo IP Camera RTSP Stream (${this.tapoService.host})`,
+        name: `Tapo RTSP Stream1 HD (TCP, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
-        args: ['-hide_banner', '-loglevel', 'error', '-rtsp_transport', 'tcp', '-i', tapoRtspUrl, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-r', '15', '-']
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_transport', 'tcp',
+          '-analyzeduration', '2000000', '-probesize', '2000000',
+          '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-i', this.tapoService.getRtspStreamUrl('stream1'),
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
       },
       {
-        name: 'rpicam-vid (RPi OS Bookworm / Bullseye CSI Camera)',
-        cmd: 'rpicam-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        name: `Tapo RTSP Stream2 SD (TCP, ${this.tapoService.host})`,
+        cmd: 'ffmpeg',
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_transport', 'tcp',
+          '-analyzeduration', '2000000', '-probesize', '2000000',
+          '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-i', this.tapoService.getRtspStreamUrl('stream2'),
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
       },
       {
-        name: 'libcamera-vid (Standard libcamera CSI Camera)',
-        cmd: 'libcamera-vid',
-        args: ['-n', '-t', '0', '--inline', '--codec', 'mjpeg', '--width', '640', '--height', '480', '--framerate', '15', '-o', '-']
+        name: `Tapo RTSP Stream1 HD (Account Username, ${this.tapoService.host})`,
+        cmd: 'ffmpeg',
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_transport', 'tcp',
+          '-analyzeduration', '2000000', '-probesize', '2000000',
+          '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-i', this.tapoService.getRtspStreamUrlAccount('stream1'),
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
       },
       {
-        name: 'raspivid (Legacy RPi Camera)',
-        cmd: 'raspivid',
-        args: ['-n', '-t', '0', '-cd', 'MJPEG', '-w', '640', '-h', '480', '-fps', '15', '-o', '-']
+        name: `Tapo RTSP Stream2 SD (Account Username, ${this.tapoService.host})`,
+        cmd: 'ffmpeg',
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_transport', 'tcp',
+          '-analyzeduration', '2000000', '-probesize', '2000000',
+          '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-i', this.tapoService.getRtspStreamUrlAccount('stream2'),
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
+      },
+      {
+        name: `Tapo RTSP Stream1 (UDP, ${this.tapoService.host})`,
+        cmd: 'ffmpeg',
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_transport', 'udp',
+          '-analyzeduration', '2000000', '-probesize', '2000000',
+          '-fflags', 'nobuffer', '-flags', 'low_delay',
+          '-i', this.tapoService.getRtspStreamUrl('stream1'),
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
       }
     ];
 
-    // Add V4L2 ffmpeg strategies for all detected /dev/video* devices
-    for (const vdev of v4lDevices.slice(0, 3)) {
-      strategies.push({
-        name: `ffmpeg ${vdev} (V4L2 Video Device)`,
-        cmd: 'ffmpeg',
-        args: ['-hide_banner', '-loglevel', 'error', '-f', 'v4l2', '-video_size', '640x480', '-framerate', '15', '-i', vdev, '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']
-      });
-    }
-
     if (this.captureStrategyIndex >= strategies.length) {
-      console.warn('[CameraSensor] All hardware camera strategies tested. Could not establish live frame stream from attached camera. Using standby buffer.');
+      console.warn(`[CameraSensor] Tapo camera reconnect cycle completed. Retrying Tapo connection at ${this.tapoService.host}...`);
       this.startStandbyFrameGenerator();
+      this.captureStrategyIndex = 0;
+      setTimeout(() => {
+        if (this.isRunning) this.tryNextCaptureStrategy();
+      }, 3000);
       return;
     }
 
     const current = strategies[this.captureStrategyIndex];
-    console.log(`[CameraSensor] Testing camera strategy ${this.captureStrategyIndex + 1}/${strategies.length}: [${current.name}]...`);
+    console.log(`[CameraSensor] Testing Tapo camera strategy ${this.captureStrategyIndex + 1}/${strategies.length}: [${current.name}]...`);
     const startTime = Date.now();
 
     try {
@@ -148,13 +176,13 @@ export class CameraSensor extends BaseSensor {
         this.cameraProcess.stderr.on('data', (data: Buffer) => {
           const msg = data.toString().trim();
           if (msg) {
-            console.log(`[CameraHardware: ${current.cmd}]`, msg);
+            console.log(`[TapoStream: ${current.cmd}]`, msg);
           }
         });
       }
 
       this.cameraProcess.on('error', (err) => {
-        console.warn(`[CameraSensor] ${current.cmd} spawn error (${err.message}). Trying next strategy...`);
+        console.warn(`[CameraSensor] ${current.cmd} spawn error (${err.message}). Trying next Tapo strategy...`);
         this.captureStrategyIndex++;
         this.tryNextCaptureStrategy();
       });
@@ -179,7 +207,7 @@ export class CameraSensor extends BaseSensor {
       while (true) {
         const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]));
         if (soi === -1) {
-          if (buffer.length > 200000) buffer = Buffer.alloc(0);
+          if (buffer.length > 2000000) buffer = Buffer.alloc(0);
           break;
         }
         if (soi > 0) {
@@ -188,7 +216,7 @@ export class CameraSensor extends BaseSensor {
 
         const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
         if (eoi === -1) {
-          if (buffer.length > 500000) buffer = Buffer.alloc(0);
+          if (buffer.length > 5000000) buffer = Buffer.alloc(0);
           break;
         }
 
@@ -197,7 +225,11 @@ export class CameraSensor extends BaseSensor {
 
         if (!receivedAnyFrame) {
           receivedAnyFrame = true;
-          console.log(`[CameraSensor] ✅ SUCCESS: Live hardware frames streaming successfully via [${strategyName}]!`);
+          if (this.simulationInterval) {
+            clearInterval(this.simulationInterval);
+            this.simulationInterval = null;
+          }
+          console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
         }
         this.onNewCameraFrame(jpegFrame);
       }
@@ -210,10 +242,10 @@ export class CameraSensor extends BaseSensor {
         this.captureStrategyIndex++;
         this.tryNextCaptureStrategy();
       } else {
-        console.warn(`[CameraSensor] Camera stream via [${strategyName}] interrupted. Re-establishing...`);
+        console.warn(`[CameraSensor] Tapo camera stream via [${strategyName}] interrupted. Reconnecting...`);
         setTimeout(() => {
           if (this.isRunning) this.tryNextCaptureStrategy();
-        }, 3000);
+        }, 2000);
       }
     });
   }

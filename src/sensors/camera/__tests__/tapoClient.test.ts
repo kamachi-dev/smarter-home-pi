@@ -34,6 +34,12 @@ describe('TapoCameraService Unit Tests', () => {
     // Verify '@' in email is URL-encoded as '%40'
     assert.strictEqual(stream1Url, 'rtsp://joaquinphillipsoriano25%40gmail.com:September--25@192.168.68.101:554/stream1');
     assert.strictEqual(stream2Url, 'rtsp://joaquinphillipsoriano25%40gmail.com:September--25@192.168.68.101:554/stream2');
+
+    const accountUrl = service.getRtspStreamUrlAccount('stream1');
+    assert.strictEqual(accountUrl, 'rtsp://joaquinphillipsoriano25:September--25@192.168.68.101:554/stream1');
+
+    const rawUrl = service.getRtspStreamUrlRaw('stream1');
+    assert.strictEqual(rawUrl, 'rtsp://joaquinphillipsoriano25@gmail.com:September--25@192.168.68.101:554/stream1');
   });
 
   it('should handle offline status gracefully when camera is unreachable', async () => {
