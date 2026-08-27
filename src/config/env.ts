@@ -58,8 +58,8 @@ export const config: AppConfig = {
   modelsPath: process.env.MODELS_PATH || path.resolve(process.cwd(), 'models'),
   isSimulatedHardware: process.env.FORCE_SIMULATION === 'true' || process.platform !== 'linux',
   tapoCameraIp: process.env.TAPO_CAMERA_IP || '192.168.68.101',
-  tapoCameraUser: process.env.TAPO_CAMERA_USER || 'joaquinphillipsoriano25@gmail.com',
-  tapoCameraPassword: process.env.TAPO_CAMERA_PASSWORD || 'September--25',
+  tapoCameraUser: process.env.TAPO_CAMERA_USER || 'CapstoneCam',
+  tapoCameraPassword: process.env.TAPO_CAMERA_PASSWORD || 'OliverSoriano',
 };
 
 export function saveHubConfig(token: string, apiUrl?: string): void {

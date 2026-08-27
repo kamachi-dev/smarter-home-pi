@@ -6,8 +6,8 @@ describe('TapoCameraService Unit Tests', () => {
   it('should initialize with default credentials from environment config', () => {
     const service = new TapoCameraService();
     assert.strictEqual(service.host, '192.168.68.101');
-    assert.strictEqual(service.user, 'joaquinphillipsoriano25@gmail.com');
-    assert.strictEqual(service.password, 'September--25');
+    assert.strictEqual(service.user, 'CapstoneCam');
+    assert.strictEqual(service.password, 'OliverSoriano');
   });
 
   it('should override default credentials when custom options are provided', () => {

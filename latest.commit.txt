@@ -1,8 +1,6 @@
-fix(camera): dedicate CameraSensor strategies exclusively to Tapo RTSP stream variants
+chore(config): update default Tapo camera credentials to CapstoneCam
 
-- Remove legacy Raspberry Pi camera strategies (`rpicam-vid`, `libcamera-vid`, `raspivid`, `/dev/video*`) from capture pipeline so the pipeline never reverts to the physical Pi camera.
-- Add multi-variant Tapo RTSP stream strategies (Stream1 HD, Stream2 SD, Account Username, and UDP transport) with low latency flags and 640x480 hardware downscaling.
-- Increase MJPEG stream parser buffer thresholds to 5MB to avoid dropping HD keyframes.
-- Add continuous Tapo camera reconnection loop with fallback standby generator while reconnecting.
-- Add unit tests for account username and raw stream URL helpers in `tapoClient.test.ts`.
-- Validate build with `npm run build` (`tsc`) and run tests with `npm test` (7/7 tests passing).
+- Update `tapoCameraUser` default to `CapstoneCam` in `src/config/env.ts` and `.env.example`.
+- Update `tapoCameraPassword` default to `OliverSoriano` in `src/config/env.ts` and `.env.example`.
+- Update unit tests in `src/sensors/camera/__tests__/tapoClient.test.ts`.
+- Verify build with `npm run build` (`tsc`) and unit test suite with `npm test` (7/7 tests passing).
