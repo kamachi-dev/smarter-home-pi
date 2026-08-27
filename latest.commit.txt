@@ -1,6 +1,5 @@
-chore(config): update default Tapo camera credentials to CapstoneCam
+chore(config): set Tapo camera default username to CapstoneCam2
 
-- Update `tapoCameraUser` default to `CapstoneCam` in `src/config/env.ts` and `.env.example`.
-- Update `tapoCameraPassword` default to `OliverSoriano` in `src/config/env.ts` and `.env.example`.
+- Update `tapoCameraUser` default in `src/config/env.ts` and `.env.example` to `CapstoneCam2`.
 - Update unit tests in `src/sensors/camera/__tests__/tapoClient.test.ts`.
 - Verify build with `npm run build` (`tsc`) and unit test suite with `npm test` (7/7 tests passing).

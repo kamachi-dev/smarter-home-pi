@@ -74,6 +74,16 @@ export class TapoCameraService {
     return `rtsp://${this.user}:${this.password}@${this.host}${portStr}/${stream}`;
   }
 
+  /**
+   * Constructs RTSP URL using an explicit custom username
+   */
+  public getRtspStreamUrlWithCustomUser(customUser: string, stream: 'stream1' | 'stream2' = 'stream1', port: number | string = 554): string {
+    const encodedUser = encodeURIComponent(customUser);
+    const encodedPassword = encodeURIComponent(this.password);
+    const portStr = port ? `:${port}` : '';
+    return `rtsp://${encodedUser}:${encodedPassword}@${this.host}${portStr}/${stream}`;
+  }
+
   public isOnline(): boolean {
     return this.isConnected;
   }

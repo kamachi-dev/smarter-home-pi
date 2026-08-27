@@ -88,10 +88,11 @@ export class CameraSensor extends BaseSensor {
   private tryNextCaptureStrategy(): void {
     const strategies: Array<{ name: string; cmd: string; args: string[] }> = [
       {
-        name: `Tapo RTSP Stream1 HD (Port 554, TCP, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream1 HD (Port 554, prefer_tcp, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
@@ -101,10 +102,11 @@ export class CameraSensor extends BaseSensor {
         ]
       },
       {
-        name: `Tapo RTSP Stream2 SD (Port 554, TCP, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream2 SD (Port 554, prefer_tcp, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
@@ -114,10 +116,11 @@ export class CameraSensor extends BaseSensor {
         ]
       },
       {
-        name: `Tapo RTSP Stream1 HD (Port 2020 ONVIF, TCP, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream1 HD (Port 2020 ONVIF, prefer_tcp, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
@@ -127,40 +130,43 @@ export class CameraSensor extends BaseSensor {
         ]
       },
       {
-        name: `Tapo RTSP Stream1 HD (Account Username, Port 554, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream1 HD (User: CapstoneCam, Port 554, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
-          '-i', this.tapoService.getRtspStreamUrlAccount('stream1', 554),
+          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('CapstoneCam', 'stream1', 554),
           '-vf', 'scale=640:480',
           '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
         ]
       },
       {
-        name: `Tapo RTSP Stream2 SD (Account Username, Port 554, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream1 HD (User: capstonecam2, Port 554, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
-          '-i', this.tapoService.getRtspStreamUrlAccount('stream2', 554),
+          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('capstonecam2', 'stream1', 554),
           '-vf', 'scale=640:480',
           '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
         ]
       },
       {
-        name: `Tapo RTSP Stream1 HD (Account Username, Port 2020, ${this.tapoService.host})`,
+        name: `Tapo RTSP Stream2 SD (User: capstonecam2, Port 554, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
         args: [
           '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
           '-rtsp_transport', 'tcp',
           '-analyzeduration', '2000000', '-probesize', '2000000',
           '-fflags', 'nobuffer', '-flags', 'low_delay',
-          '-i', this.tapoService.getRtspStreamUrlAccount('stream1', 2020),
+          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('capstonecam2', 'stream2', 554),
           '-vf', 'scale=640:480',
           '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
         ]
