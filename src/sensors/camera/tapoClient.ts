@@ -48,27 +48,30 @@ export class TapoCameraService {
    * Constructs the RTSP stream URL for streaming via ffmpeg.
    * Encodes username/password special characters (e.g. '@' in email).
    */
-  public getRtspStreamUrl(stream: 'stream1' | 'stream2' = 'stream1'): string {
+  public getRtspStreamUrl(stream: 'stream1' | 'stream2' = 'stream1', port: number | string = 554): string {
     const encodedUser = encodeURIComponent(this.user);
     const encodedPassword = encodeURIComponent(this.password);
-    return `rtsp://${encodedUser}:${encodedPassword}@${this.host}:554/${stream}`;
+    const portStr = port ? `:${port}` : '';
+    return `rtsp://${encodedUser}:${encodedPassword}@${this.host}${portStr}/${stream}`;
   }
 
   /**
    * Constructs RTSP URL using local camera account username (stripping domain if email is provided)
    */
-  public getRtspStreamUrlAccount(stream: 'stream1' | 'stream2' = 'stream1'): string {
+  public getRtspStreamUrlAccount(stream: 'stream1' | 'stream2' = 'stream1', port: number | string = 554): string {
     const accountUser = this.user.includes('@') ? this.user.split('@')[0] : this.user;
     const encodedUser = encodeURIComponent(accountUser);
     const encodedPassword = encodeURIComponent(this.password);
-    return `rtsp://${encodedUser}:${encodedPassword}@${this.host}:554/${stream}`;
+    const portStr = port ? `:${port}` : '';
+    return `rtsp://${encodedUser}:${encodedPassword}@${this.host}${portStr}/${stream}`;
   }
 
   /**
    * Constructs unencoded RTSP URL for ffmpeg clients that perform their own URL decoding
    */
-  public getRtspStreamUrlRaw(stream: 'stream1' | 'stream2' = 'stream1'): string {
-    return `rtsp://${this.user}:${this.password}@${this.host}:554/${stream}`;
+  public getRtspStreamUrlRaw(stream: 'stream1' | 'stream2' = 'stream1', port: number | string = 554): string {
+    const portStr = port ? `:${port}` : '';
+    return `rtsp://${this.user}:${this.password}@${this.host}${portStr}/${stream}`;
   }
 
   public isOnline(): boolean {

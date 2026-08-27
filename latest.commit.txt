@@ -1,5 +1,8 @@
-fix(dashboard): bind camera stream display to Tapo IP camera RTSP feed
+fix(camera): dedicate CameraSensor strategies exclusively to Tapo RTSP stream variants
 
-- Update dashboard HUD header and FPS badges in `html.ts` and `cameraScript.ts` to display "TAPO IP CAMERA (192.168.68.101) • LIVE RTSP".
-- Disable automatic local browser webcam capture in `telemetryScript.ts` to prevent browser media devices from overriding the server Tapo camera stream.
-- Re-verify TypeScript build (`npm run build`) and test suite (`npm test`) with 7/7 tests passing.
+- Remove legacy Raspberry Pi camera strategies (`rpicam-vid`, `libcamera-vid`, `raspivid`, `/dev/video*`) from capture pipeline so the pipeline never reverts to the physical Pi camera.
+- Add multi-variant Tapo RTSP stream strategies (Stream1 HD, Stream2 SD, Account Username, and UDP transport) with low latency flags and 640x480 hardware downscaling.
+- Increase MJPEG stream parser buffer thresholds to 5MB to avoid dropping HD keyframes.
+- Add continuous Tapo camera reconnection loop with fallback standby generator while reconnecting.
+- Add unit tests for account username and raw stream URL helpers in `tapoClient.test.ts`.
+- Validate build with `npm run build` (`tsc`) and run tests with `npm test` (7/7 tests passing).
