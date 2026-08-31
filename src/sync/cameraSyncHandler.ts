@@ -141,15 +141,19 @@ export class CameraSyncHandler {
       try {
         const homeId = await this.getLinkedHomeId();
 
-        await this.supabase
-          .from('family_members')
-          .update({
-            status: 'Home',
-            last_seen: 'Just now',
-            via: `${sensorName} (Facial Recognition)`,
-            updated_at: isoNow
-          })
-          .ilike('name', arrival.person);
+        const isStranger = arrival.person.toLowerCase().includes('stranger') || arrival.person.toLowerCase().includes('unknown') || arrival.person.toLowerCase().includes('unverified');
+
+        if (!isStranger) {
+          await this.supabase
+            .from('family_members')
+            .update({
+              status: 'Home',
+              last_seen: 'Just now',
+              via: `${sensorName} (Facial Recognition)`,
+              updated_at: isoNow
+            })
+            .ilike('name', arrival.person);
+        }
 
         if (homeId) {
           const { data: existingState } = await this.supabase
@@ -164,12 +168,17 @@ export class CameraSyncHandler {
 
           // Also automatically append to Security Logs with snapshot
           const timeStr = new Date(isoNow).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const eventTitle = isStranger
+            ? `Intruder Alert: Unrecognized Person Detected`
+            : `Face Verified: ${arrival.person} (${Math.round(arrival.confidence * 100)}%)`;
+          const logSeverity = isStranger ? 'warning' : 'success';
+
           const newSecurityLog = {
             id: Date.now(),
             time: timeStr,
-            event: `Face Verified: ${arrival.person} (${Math.round(arrival.confidence * 100)}%)`,
+            event: eventTitle,
             location: sensorName || 'Room Camera',
-            severity: 'success',
+            severity: logSeverity,
             snapshot: base64Image,
             person: arrival.person,
             confidence: arrival.confidence

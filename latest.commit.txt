@@ -1,6 +1,5 @@
-﻿fix(face-recognition): tune neural detector sensitivity, multi-resolution scaling, and model loading
+﻿feat(camera): track and log stranger detections with multi-scale face cascade
 
-- Lowered TinyFaceDetector scoreThreshold from 0.45 to 0.25 (with 0.20 fallback) to detect angled, seated, or distant faces
-- Added multi-resolution inputSize scaling (416 -> 320) for wide-angle room security cameras
-- Added optional SSD MobileNet neural model fallback loading
-- Validated all tests and TypeScript compilation
+- Updated PresenceTracker to track unknown/stranger faces and trigger first-frame dispatch
+- Configured cameraSyncHandler to log Intruder Alerts with warning severity in home_states
+- Added multi-scale 512px/416px/320px TinyFaceDetector and SsdMobilenetv1 cascades

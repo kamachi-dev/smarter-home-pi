@@ -1,4 +1,4 @@
-﻿import { FaceDetectionPayload, DetectedFace } from '../../types/index.js';
+import { FaceDetectionPayload, DetectedFace } from '../../types/index.js';
 
 export interface PersonArrivalEvent {
   person: string;
@@ -56,27 +56,29 @@ export class PresenceTracker {
       return newlyArrived;
     }
 
-    const recognizedFaces: Array<{ name: string; conf: number; box?: any }> = [];
+    const detectedFaces: Array<{ name: string; conf: number; isRecognized: boolean; box?: any }> = [];
 
     if (detection.faces && detection.faces.length > 0) {
       for (const face of detection.faces) {
-        if (face.status === 'recognized' && face.person && face.person !== 'Unknown Person') {
-          recognizedFaces.push({
-            name: face.person,
-            conf: face.confidence,
-            box: face.box
-          });
-        }
+        const isKnown = face.status === 'recognized' && face.person && face.person !== 'Unknown Person';
+        detectedFaces.push({
+          name: isKnown ? face.person : 'Stranger / Unverified Person',
+          conf: face.confidence || 0.5,
+          isRecognized: isKnown,
+          box: face.box
+        });
       }
-    } else if (detection.status === 'recognized' && detection.person && detection.person !== 'Unknown Person') {
-      recognizedFaces.push({
-        name: detection.person,
-        conf: detection.confidence,
+    } else if (detection.detected) {
+      const isKnown = detection.status === 'recognized' && detection.person && detection.person !== 'Unknown Person';
+      detectedFaces.push({
+        name: isKnown ? detection.person : 'Stranger / Unverified Person',
+        conf: detection.confidence || 0.5,
+        isRecognized: isKnown,
         box: detection.box
       });
     }
 
-    for (const rec of recognizedFaces) {
+    for (const rec of detectedFaces) {
       const normalizedName = rec.name.trim();
       const existing = this.trackedPeople.get(normalizedName);
 
@@ -99,7 +101,7 @@ export class PresenceTracker {
         });
 
         console.log(
-          `[PresenceTracker] 👤 FIRST FRAME CAPTURE: "${normalizedName}" arrived (Confidence: ${(rec.conf * 100).toFixed(1)}%). Dispatching to Supabase!`
+          `[PresenceTracker] 👤 FIRST FRAME CAPTURE: "${normalizedName}" detected (Confidence: ${(rec.conf * 100).toFixed(1)}%). Dispatching to Supabase!`
         );
       } else {
         existing.lastSeenAt = now;

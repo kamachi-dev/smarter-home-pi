@@ -264,18 +264,44 @@ export class FaceRecognitionEngine {
     }
 
     try {
-      // Use scoreThreshold 0.25 to catch distant, angled, or low-light faces in room cameras
-      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.25 });
-      let detections = await faceapi.detectAllFaces(tensor, detectorOptions)
-        .withFaceLandmarks(true)
-        .withFaceDescriptors();
+      // Multi-scale TinyFaceDetector and SsdMobilenetv1 cascade for wide-angle room cameras
+      let detections: any = null;
 
-      // Fallback with standard 320 size if 416 returned empty
-      if (!detections || detections.length === 0) {
-        const fallbackOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.20 });
-        detections = await faceapi.detectAllFaces(tensor, fallbackOptions)
+      try {
+        const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.18 });
+        detections = await faceapi.detectAllFaces(tensor, detectorOptions)
           .withFaceLandmarks(true)
           .withFaceDescriptors();
+      } catch {}
+
+      // Fallback 1: 512px resolution for smaller/distant faces in room cameras
+      if (!detections || detections.length === 0) {
+        try {
+          const hiresOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.15 });
+          detections = await faceapi.detectAllFaces(tensor, hiresOptions)
+            .withFaceLandmarks(true)
+            .withFaceDescriptors();
+        } catch {}
+      }
+
+      // Fallback 2: 320px standard resolution
+      if (!detections || detections.length === 0) {
+        try {
+          const fallbackOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 });
+          detections = await faceapi.detectAllFaces(tensor, fallbackOptions)
+            .withFaceLandmarks(true)
+            .withFaceDescriptors();
+        } catch {}
+      }
+
+      // Fallback 3: SSD MobileNet V1 if loaded
+      if ((!detections || detections.length === 0) && faceapi.nets.ssdMobilenetv1?.params) {
+        try {
+          const ssdOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.15 });
+          detections = await faceapi.detectAllFaces(tensor, ssdOptions)
+            .withFaceLandmarks(true)
+            .withFaceDescriptors();
+        } catch {}
       }
 
       if (!detections || detections.length === 0) {
