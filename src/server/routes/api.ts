@@ -78,9 +78,20 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
-  // Live Camera MJPEG Video Stream (RPi Camera Module / USB)
-  server.get('/api/camera/stream', async (request, reply) => {
-    const camSensor = registry.getAllSensors().find(s => s.type === 'camera') as any;
+  // Live Camera MJPEG Video Stream (Supports multi-room ?room=roomId parameter)
+  server.get<{ Querystring: { room?: string } }>('/api/camera/stream', async (request, reply) => {
+    const { room: roomId } = request.query || {};
+
+    let camSensor: any = null;
+    if (roomId) {
+      camSensor = registry.getSensor(`sensor-cam-${roomId}`) ||
+        registry.getAllSensors().find(s => s.type === 'camera' && (s.config.options?.roomId === roomId || s.config.options?.room_id === roomId));
+    }
+    
+    if (!camSensor) {
+      camSensor = registry.getAllSensors().find(s => s.type === 'camera');
+    }
+
     if (!camSensor || typeof camSensor.subscribeStream !== 'function') {
       return reply.code(404).send({ error: 'Camera module not initialized.' });
     }

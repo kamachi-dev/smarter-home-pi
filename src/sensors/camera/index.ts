@@ -89,7 +89,30 @@ export class CameraSensor extends BaseSensor {
   }
 
   private tryNextCaptureStrategy(): void {
-    const strategies: Array<{ name: string; cmd: string; args: string[] }> = [
+    const customStreamUrl = this.config.options?.streamUrl || this.config.options?.camera_stream_url;
+    const strategies: Array<{ name: string; cmd: string; args: string[] }> = [];
+
+    if (customStreamUrl) {
+      strategies.push({
+        name: `Custom Room RTSP Stream (${this.config.name} - ${customStreamUrl})`,
+        cmd: 'ffmpeg',
+        args: [
+          '-hide_banner', '-loglevel', 'warning',
+          '-rtsp_flags', 'prefer_tcp',
+          '-rtsp_transport', 'tcp',
+          '-avioflags', 'direct',
+          '-fflags', 'nobuffer+discardcorrupt',
+          '-flags', 'low_delay',
+          '-max_delay', '500000',
+          '-analyzeduration', '1000000', '-probesize', '1000000',
+          '-i', customStreamUrl,
+          '-vf', 'scale=640:480',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+        ]
+      });
+    }
+
+    strategies.push(
       {
         name: `Tapo RTSP Stream1 HD (Port 554, prefer_tcp, ${this.tapoService.host})`,
         cmd: 'ffmpeg',
@@ -208,7 +231,7 @@ export class CameraSensor extends BaseSensor {
           '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
         ]
       }
-    ];
+    );
 
     if (this.captureStrategyIndex >= strategies.length) {
       console.warn(`[CameraSensor] Tapo camera reconnect cycle completed. Retrying Tapo connection at ${this.tapoService.host}...`);

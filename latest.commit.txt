@@ -1,5 +1,7 @@
-﻿feat(dashboard): embed live AI-processed stream within each room card
+﻿feat(cameras): dynamically ingest and process inbound RTSP streams per room record
 
-- Render live processed video stream element (MJPEG) in room cards that have an attached camera
-- Show HUD overlay with camera IP and AI Face processed status tag
-- Render visual unassigned placeholder for rooms without an attached RTSP camera
+- Support custom room RTSP stream URLs in CameraSensor strategies
+- Register dynamic CameraSensor per room in SmarterHomeSync based on Supabase room camera records
+- Support multiple inbound RTSP streams concurrently with facial recognition and bounding box overlays
+- Route multi-room stream parameters in /api/camera/stream?room=roomId
+- Realtime subscription on Supabase rooms table to auto-spawn/update camera sensors when rooms are modified

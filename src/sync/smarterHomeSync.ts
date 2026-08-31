@@ -62,10 +62,11 @@ export class SmarterHomeSync {
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
 
-      // 1. Initial sync of family members from Supabase
+      // 1. Initial sync of family members & rooms from Supabase
       this.syncFamilyMembersFromSupabase();
+      this.syncRoomsFromSupabase();
 
-      // 2. Subscribe to Realtime family_members table changes
+      // 2. Subscribe to Realtime family_members & rooms table changes
       this.supabase
         .channel('pi-family-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, (payload) => {
@@ -81,8 +82,61 @@ export class SmarterHomeSync {
           }
         })
         .subscribe();
+
+      this.supabase
+        .channel('pi-rooms-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+          console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras...');
+          this.syncRoomsFromSupabase().catch(() => {});
+        })
+        .subscribe();
     } catch (err) {
       console.warn('[SmarterHomeSync] Supabase Realtime init error:', (err as Error).message);
+    }
+  }
+
+  public async syncRoomsFromSupabase(): Promise<void> {
+    if (!this.supabase) return;
+    try {
+      const homeId = await this.getLinkedHomeId();
+      if (!homeId) return;
+
+      const { data: rooms, error } = await this.supabase
+        .from('rooms')
+        .select('*')
+        .eq('home_id', homeId);
+
+      if (!error && rooms && Array.isArray(rooms)) {
+        for (const room of rooms) {
+          const camSensorId = `sensor-cam-${room.id}`;
+          if (room.camera_enabled && room.camera_ip) {
+            const streamUrl = room.camera_stream_url || (
+              room.camera_ip ? `rtsp://${room.camera_username ? encodeURIComponent(room.camera_username) + (room.camera_password ? ':' + encodeURIComponent(room.camera_password) : '') + '@' : ''}${room.camera_ip}:554/stream1` : undefined
+            );
+
+            const existing = this.registry.getSensor(camSensorId);
+            if (!existing) {
+              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip})...`);
+              await this.registry.registerSensor({
+                id: camSensorId,
+                name: `${room.name} Camera`,
+                type: 'camera',
+                pollIntervalMs: 2000,
+                enabled: true,
+                options: {
+                  roomId: room.id,
+                  ip: room.camera_ip,
+                  user: room.camera_username,
+                  password: room.camera_password,
+                  streamUrl: streamUrl
+                }
+              }, false);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[SmarterHomeSync] Failed to sync rooms cameras from Supabase:', (err as Error).message);
     }
   }
 
@@ -119,12 +173,13 @@ export class SmarterHomeSync {
     // Listen directly to any active camera sensor for per-frame streaming & first-frame arrival events
     const bindCamera = (sensor: any) => {
       if (sensor && sensor.type === 'camera') {
+        const roomId = sensor.config?.options?.roomId || sensor.config?.options?.room_id;
         sensor.on('frame', (frame: Buffer) => {
-          this.cameraSync.sendLiveFrame(frame, sensor.getFaceDetection?.()).catch(() => {});
+          this.cameraSync.sendLiveFrame(frame, sensor.getFaceDetection?.(), roomId).catch(() => {});
         });
 
         sensor.on('person_arrival', (arrival: any) => {
-          this.cameraSync.sendFirstFrameArrival(arrival, sensor.id, sensor.config?.name || 'Entrance Camera').catch(() => {});
+          this.cameraSync.sendFirstFrameArrival(arrival, sensor.id, sensor.config?.name || 'Room Camera').catch(() => {});
         });
       }
     };
