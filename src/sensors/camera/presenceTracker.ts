@@ -60,18 +60,18 @@ export class PresenceTracker {
 
     if (detection.faces && detection.faces.length > 0) {
       for (const face of detection.faces) {
-        const isKnown = face.status === 'recognized' && face.person && face.person !== 'Unknown Person';
+        const isKnown = Boolean(face.status === 'recognized' && face.person && face.person !== 'Unknown Person');
         detectedFaces.push({
-          name: isKnown ? face.person : 'Stranger / Unverified Person',
+          name: (isKnown && face.person ? face.person : 'Stranger / Unverified Person'),
           conf: face.confidence || 0.5,
           isRecognized: isKnown,
           box: face.box
         });
       }
     } else if (detection.detected) {
-      const isKnown = detection.status === 'recognized' && detection.person && detection.person !== 'Unknown Person';
+      const isKnown = Boolean(detection.status === 'recognized' && detection.person && detection.person !== 'Unknown Person');
       detectedFaces.push({
-        name: isKnown ? detection.person : 'Stranger / Unverified Person',
+        name: (isKnown && detection.person ? detection.person : 'Stranger / Unverified Person'),
         conf: detection.confidence || 0.5,
         isRecognized: isKnown,
         box: detection.box

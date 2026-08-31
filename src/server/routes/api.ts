@@ -248,6 +248,17 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
   });
 
+  // Citadel Rooms & Camera Streams
+  server.get('/api/rooms', async (request, reply) => {
+    try {
+      await syncGateway.syncRoomsFromSupabase();
+      const rooms = await syncGateway.getRooms();
+      return { rooms };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
   // Face Recognition: Enrolled Profiles
   server.get('/api/faces', async () => {
     return {

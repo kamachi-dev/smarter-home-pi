@@ -107,6 +107,7 @@ export class SmarterHomeSync {
         .eq('home_id', homeId);
 
       if (!error && rooms && Array.isArray(rooms)) {
+        this.cachedRooms = rooms;
         for (const room of rooms) {
           const camSensorId = `sensor-cam-${room.id}`;
           if (room.camera_enabled && room.camera_ip) {
@@ -206,6 +207,22 @@ export class SmarterHomeSync {
     this.registry.on('sensor_registered', bindCamera);
   }
 
+  private cachedRooms: any[] = [];
+
+  public async getRooms(): Promise<any[]> {
+    if (this.cachedRooms.length > 0) return this.cachedRooms;
+    if (!this.supabase) return [];
+    try {
+      const homeId = await this.getLinkedHomeId();
+      if (!homeId) return [];
+      const { data } = await this.supabase.from('rooms').select('*').eq('home_id', homeId);
+      this.cachedRooms = data || [];
+      return this.cachedRooms;
+    } catch {
+      return [];
+    }
+  }
+
   private async getLinkedHomeId(): Promise<string | null> {
     if (this.cachedHomeId) return this.cachedHomeId;
     if (!this.supabase || !config.smarterHomeToken) return null;
@@ -217,6 +234,17 @@ export class SmarterHomeSync {
         .maybeSingle();
       if (data?.home_id) {
         this.cachedHomeId = data.home_id;
+        return this.cachedHomeId;
+      }
+
+      // Fallback: check if the token itself is a valid home_id in the homes table
+      const { data: homeData } = await this.supabase
+        .from('homes')
+        .select('id')
+        .eq('id', config.smarterHomeToken)
+        .maybeSingle();
+      if (homeData?.id) {
+        this.cachedHomeId = homeData.id;
         return this.cachedHomeId;
       }
     } catch {}
