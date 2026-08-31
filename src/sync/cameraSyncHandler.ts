@@ -217,11 +217,23 @@ export class CameraSyncHandler {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              messages: [{
-                topic: `home-security-${homeId}`,
-                event: 'person_detected_first_frame',
-                payload: detectedPersonRecord
-              }]
+              messages: [
+                {
+                  topic: `home-security-${homeId}`,
+                  event: 'person_detected_first_frame',
+                  payload: detectedPersonRecord
+                },
+                {
+                  topic: `home-camera-${homeId}`,
+                  event: 'person_detected_first_frame',
+                  payload: detectedPersonRecord
+                },
+                {
+                  topic: `home-db-changes-${homeId}`,
+                  event: 'person_detected_first_frame',
+                  payload: detectedPersonRecord
+                }
+              ]
             })
           }).catch(() => {});
         }

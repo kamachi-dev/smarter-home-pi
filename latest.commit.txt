@@ -1,5 +1,5 @@
-﻿feat(sync): route room queries through central smarter-home server API with token
+﻿fix(sync): broadcast first frame arrivals across home-security and home-camera channels
 
-- Configured SmarterHomeSync to query the main smarter-home server API (/api/rooms) using x-pi-token
-- Added automatic fallback to direct Supabase rooms query
+- Updated sendFirstFrameArrival to broadcast to home-security, home-camera, and home-db-changes
+- Guaranteed reliable arrival event receipt on web dashboard and security views
 - Verified 100% build pass and unit tests
