@@ -26,8 +26,31 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
-  // Get all rooms and attached camera streams from Supabase
+  // Get all rooms and attached camera streams from Smarter Home Cloud or Supabase
   server.get('/api/rooms', async () => {
+    // 1. Try fetching via Smarter Home Cloud API with token
+    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
+      try {
+        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
+        const res = await fetch(targetUrl, {
+          headers: {
+            'x-pi-token': config.smarterHomeToken,
+            'x-pi-api-key': config.smarterHomeApiKey
+          },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          if (data && Array.isArray(data.rooms)) {
+            return { rooms: data.rooms };
+          }
+        }
+      } catch (httpErr) {
+        // Fall back to Supabase direct
+      }
+    }
+
+    // 2. Fall back to direct Supabase client
     const supabase = syncGateway.getSupabaseClient();
     const homeId = await syncGateway.getHomeId();
     if (!supabase || !homeId) {

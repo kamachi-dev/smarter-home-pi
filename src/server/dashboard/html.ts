@@ -141,70 +141,38 @@ export function getDashboardHtmlTemplate(script: string): string {
       <!-- Right: Live Telemetry & Face Detection Stream (7 Cols) -->
       <section class="lg:col-span-7 space-y-6">
 
-        <!-- Facial Recognition Camera Card -->
-        <div class="glass-panel p-6 rounded-2xl space-y-4 relative overflow-hidden">
-          <div class="flex flex-wrap justify-between items-center gap-2">
+        <!-- AI Face Recognition Status & Detection Telemetry -->
+        <div class="glass-panel p-5 rounded-2xl space-y-3">
+          <div class="flex flex-wrap justify-between items-center gap-2 border-b border-stone-800 pb-3">
             <div class="flex items-center gap-2.5">
               <div class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></div>
-              <h2 class="text-base font-bold text-white">Live Camera & Facial Recognition</h2>
+              <h2 class="text-sm font-bold text-white tracking-wide">AI Facial Recognition Telemetry</h2>
             </div>
             
             <div class="flex items-center gap-2">
-              <span class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                ALWAYS LIVE
-              </span>
               <span id="face-state-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-stone-800 text-stone-400 uppercase tracking-wide">
                 MONITORING
               </span>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <!-- Real Raspberry Pi Camera MJPEG Stream with Dynamic Face Bounding Box Overlay -->
-            <div class="relative aspect-video bg-stone-950 rounded-xl border border-stone-800 overflow-hidden flex items-center justify-center group shadow-2xl">
-              <!-- Live Hardware MJPEG Video Feed -->
-              <img id="camera-mjpeg-stream" src="/api/camera/stream" alt="Live Camera" class="absolute inset-0 w-full h-full object-cover z-0" onerror="handleStreamError(this)" onload="handleStreamLoad()" />
-              <video id="webcam-video" autoplay playsinline muted class="hidden"></video>
-              <canvas id="live-video-canvas" width="640" height="480" class="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"></canvas>
-              
-              <!-- Live HUD overlay -->
-              <div class="absolute top-2.5 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-emerald-400 font-bold z-10">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span id="cam-hud-label">TAPO IP CAMERA (192.168.68.101) • LIVE RTSP</span>
-              </div>
-
-              <div class="absolute top-2.5 right-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[9px] font-mono text-stone-300 z-10">
-                <span id="canvas-timecode">--:--:--</span>
-              </div>
-
-              <div class="absolute bottom-2.5 left-3 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[8.5px] font-mono text-stone-400 z-10">
-                <span id="cam-fps-badge">640x480 • 15 FPS • TAPO RTSP STREAM</span>
-              </div>
+          <!-- Face Detection Telemetry Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+            <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
+              <span class="text-stone-500 text-[10px] block uppercase">Face Detected</span>
+              <span id="det-detected" class="font-bold text-stone-200 text-sm mt-0.5 block">No</span>
             </div>
-
-            <!-- Face Detection Telemetry Data -->
-            <div class="space-y-3 bg-stone-950/40 border border-stone-850 p-4 rounded-xl text-xs font-mono">
-              <div class="flex justify-between border-b border-stone-800 pb-2">
-                <span class="text-stone-400">Face Detected:</span>
-                <span id="det-detected" class="font-bold text-stone-200">No</span>
-              </div>
-              <div class="flex justify-between border-b border-stone-800 pb-2">
-                <span class="text-stone-400">Match Status:</span>
-                <span id="det-status" class="font-bold text-stone-200">none</span>
-              </div>
-              <div class="flex justify-between border-b border-stone-800 pb-2">
-                <span class="text-stone-400">Identified Person:</span>
-                <span id="det-person" class="font-bold text-amber-400">None</span>
-              </div>
-              <div class="flex justify-between border-b border-stone-800 pb-2">
-                <span class="text-stone-400">Confidence Score:</span>
-                <span id="det-confidence" class="font-bold text-stone-200">0.0%</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-stone-400">Last Event Time:</span>
-                <span id="det-time" class="text-[10px] text-stone-400">--:--:--</span>
-              </div>
+            <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
+              <span class="text-stone-500 text-[10px] block uppercase">Identified Person</span>
+              <span id="det-person" class="font-bold text-amber-400 text-sm mt-0.5 block truncate">None</span>
+            </div>
+            <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
+              <span class="text-stone-500 text-[10px] block uppercase">Confidence</span>
+              <span id="det-confidence" class="font-bold text-stone-200 text-sm mt-0.5 block">0.0%</span>
+            </div>
+            <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
+              <span class="text-stone-500 text-[10px] block uppercase">Last Event</span>
+              <span id="det-time" class="font-bold text-stone-400 text-xs mt-1 block">--:--:--</span>
             </div>
           </div>
         </div>

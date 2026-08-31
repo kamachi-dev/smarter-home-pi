@@ -1,6 +1,7 @@
-﻿feat(dashboard): show all citadel rooms and connected camera streams on pi
+﻿feat(dashboard): remove redundant top footage & support token-based room sync
 
-- Add /api/rooms endpoint to query synchronized rooms from Supabase for the linked home
-- Render Citadel Rooms & RTSP Cameras section on the Raspberry Pi web dashboard
-- Display real-time room metadata, temperature targets, humidity, RTSP stream URL, and IP connection status
-- Auto-refresh room list on dashboard initialization and provide manual refresh button
+- Remove redundant top camera video stream card and replace with compact AI Face ID telemetry summary
+- Update GET /api/rooms on Pi to authenticate with Smarter Home cloud using permanent home token
+- Update smarter-home GET /api/rooms Route Handler to support x-pi-token header, resolving home_id and returning all citadel rooms
+- Ensure graceful fallback to direct Supabase client if offline
+- Update dashboard unit tests in smarter-home-pi

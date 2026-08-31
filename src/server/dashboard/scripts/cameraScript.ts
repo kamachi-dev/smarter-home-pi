@@ -1,6 +1,6 @@
 export const cameraScript = `
     const canvas = document.getElementById('live-video-canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas ? canvas.getContext('2d') : null;
     let animationFrameId;
     let isWebcamActive = false;
     let webcamStream = null;
@@ -10,6 +10,7 @@ export const cameraScript = `
     async function initAutoWebcam() {
       const video = document.getElementById('webcam-video');
       const hudLabel = document.getElementById('cam-hud-label');
+      if (!video) return;
 
       try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -20,7 +21,8 @@ export const cameraScript = `
           await video.play();
           isWebcamActive = true;
           if (hudLabel) hudLabel.textContent = 'LIVE CAMERA • AI FACE ID ACTIVE';
-          document.getElementById('cam-fps-badge').textContent = '640x480 • 30 FPS • WEBCAM + AI';
+          const badge = document.getElementById('cam-fps-badge');
+          if (badge) badge.textContent = '640x480 • 30 FPS • WEBCAM + AI';
         }
       } catch (err) {
         isWebcamActive = false;
@@ -31,14 +33,16 @@ export const cameraScript = `
       isStreamLoaded = true;
       const hudLabel = document.getElementById('cam-hud-label');
       if (hudLabel) hudLabel.textContent = 'TAPO IP CAMERA (192.168.68.101) • LIVE RTSP';
-      document.getElementById('cam-fps-badge').textContent = '640x480 • 15 FPS • TAPO RTSP STREAM';
+      const badge = document.getElementById('cam-fps-badge');
+      if (badge) badge.textContent = '640x480 • 15 FPS • TAPO RTSP STREAM';
     }
 
     function handleStreamError(img) {
       isStreamLoaded = false;
-      document.getElementById('cam-fps-badge').textContent = '640x480 • RECONNECTING TAPO STREAM...';
+      const badge = document.getElementById('cam-fps-badge');
+      if (badge) badge.textContent = '640x480 • RECONNECTING TAPO STREAM...';
       setTimeout(() => {
-        if (!isWebcamActive) {
+        if (!isWebcamActive && img) {
           img.src = '/api/camera/stream?t=' + Date.now();
         }
       }, 3000);
@@ -75,25 +79,28 @@ export const cameraScript = `
     }
 
     function startCanvasRenderLoop() {
+      if (!canvas || !ctx) return;
       let t = 0;
       const video = document.getElementById('webcam-video');
       const streamImg = document.getElementById('camera-mjpeg-stream');
 
       function render() {
+        if (!canvas || !ctx) return;
         t += 0.035;
         const now = new Date();
         const timecode = now.toTimeString().split(' ')[0] + '.' + String(Math.floor(now.getMilliseconds() / 100));
-        document.getElementById('canvas-timecode').textContent = timecode;
+        const timeElem = document.getElementById('canvas-timecode');
+        if (timeElem) timeElem.textContent = timecode;
 
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (isWebcamActive && video.readyState >= 2) {
-          streamImg.classList.add('hidden');
+        if (isWebcamActive && video && video.readyState >= 2) {
+          if (streamImg) streamImg.classList.add('hidden');
           // Draw real local webcam frame
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           captureAndSendWebcamFrame(video);
-        } else {
+        } else if (streamImg) {
           streamImg.classList.remove('hidden');
         }
 

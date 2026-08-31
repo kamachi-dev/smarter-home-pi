@@ -7,9 +7,9 @@ describe('Dashboard HTML & Client Script Tests', () => {
   it('should generate valid HTML template containing dashboard scripts', () => {
     const html = getDashboardHtmlTemplate(dashboardClientScript);
     assert.ok(html.includes('<!DOCTYPE html>'));
-    assert.ok(html.includes('id="camera-mjpeg-stream"'));
-    assert.ok(html.includes('onload="handleStreamLoad()"'));
-    assert.ok(html.includes('onerror="handleStreamError(this)"'));
+    assert.ok(html.includes('id="rooms-camera-grid"'));
+    assert.ok(html.includes('id="det-detected"'));
+    assert.ok(html.includes('id="det-person"'));
   });
 
   it('should export handleStreamLoad and handleStreamError to window', () => {
