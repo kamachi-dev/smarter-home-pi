@@ -246,13 +246,16 @@ export class SmarterHomeSync {
       await this.syncTelemetry();
     }, config.syncIntervalMs);
 
-    // 2. Continuous camera frame stream loop (~3.3 FPS)
+    // 2. Continuous multi-camera frame stream loop (~3.3 FPS)
     this.cameraStreamTimer = setInterval(async () => {
-      const cam = this.registry.getAllSensors().find(s => s.type === 'camera') as any;
-      if (cam && typeof cam.getLatestFrame === 'function') {
-        const frame = cam.getLatestFrame();
-        if (frame) {
-          await this.cameraSync.sendLiveFrame(frame, cam.getFaceDetection?.()).catch(() => {});
+      const cameraSensors = this.registry.getAllSensors().filter(s => s.type === 'camera') as any[];
+      for (const cam of cameraSensors) {
+        if (cam && typeof cam.getLatestFrame === 'function') {
+          const frame = cam.getLatestFrame();
+          if (frame) {
+            const roomId = cam.config?.options?.roomId || cam.config?.options?.room_id;
+            await this.cameraSync.sendLiveFrame(frame, cam.getFaceDetection?.(), roomId).catch(() => {});
+          }
         }
       }
     }, 300);

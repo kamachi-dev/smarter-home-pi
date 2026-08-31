@@ -1,4 +1,5 @@
-﻿fix(cameras): simplify ffmpeg RTSP arguments to match VLC standard connection
+﻿feat(security): stream switching per room in SecuritySystem
 
-- Removed aggressive low-delay/buffer-discarding ffmpeg flags that interfered with Tapo RTSP DESCRIBE/SETUP handshakes
-- Use standard TCP transport matching VLC configuration
+- Broadcast per-room processed AI streams concurrently in smarterHomeSync loop
+- Strictly switch between room camera feeds in SecuritySystem dashboard based on selected room tab
+- Prioritize dynamic room cameras in selector pill list
