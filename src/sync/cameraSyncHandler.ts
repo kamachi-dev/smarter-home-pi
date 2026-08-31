@@ -162,12 +162,43 @@ export class CameraSyncHandler {
           const currentList = Array.isArray(existingState?.value) ? existingState.value : [];
           const updatedList = [detectedPersonRecord, ...currentList.filter((p: any) => p.name !== arrival.person || (Date.now() - new Date(p.timestamp).getTime() > 60000))].slice(0, 25);
 
-          await this.supabase.from('home_states').upsert({
-            home_id: homeId,
-            key: 'detected_people',
-            value: updatedList,
-            updated_at: isoNow
-          }, { onConflict: 'home_id,key' });
+          // Also automatically append to Security Logs with snapshot
+          const timeStr = new Date(isoNow).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const newSecurityLog = {
+            id: Date.now(),
+            time: timeStr,
+            event: `Face Verified: ${arrival.person} (${Math.round(arrival.confidence * 100)}%)`,
+            location: sensorName || 'Room Camera',
+            severity: 'success',
+            snapshot: base64Image,
+            person: arrival.person,
+            confidence: arrival.confidence
+          };
+
+          const { data: existingLogsState } = await this.supabase
+            .from('home_states')
+            .select('value')
+            .eq('home_id', homeId)
+            .eq('key', 'logs')
+            .maybeSingle();
+
+          const currentLogs = Array.isArray(existingLogsState?.value) ? existingLogsState.value : [];
+          const updatedLogs = [newSecurityLog, ...currentLogs].slice(0, 30);
+
+          await this.supabase.from('home_states').upsert([
+            {
+              home_id: homeId,
+              key: 'detected_people',
+              value: updatedList,
+              updated_at: isoNow
+            },
+            {
+              home_id: homeId,
+              key: 'logs',
+              value: updatedLogs,
+              updated_at: isoNow
+            }
+          ], { onConflict: 'home_id,key' });
 
           await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {
             method: 'POST',
