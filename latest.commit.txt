@@ -1,7 +1,11 @@
-perf(camera): optimize stream pipeline to eliminate delay and display latest frames
+﻿feat(camera): pi-first face recognition with first-frame arrival tracking
 
-- Add `-avioflags direct`, `-fflags nobuffer+discardcorrupt`, and `-max_delay 500000` to FFmpeg capture pipeline in `CameraSensor` to bypass input/demuxer buffer buildup.
-- Reduce probe/analysis limits (`-analyzeduration 1000000`, `-probesize 1000000`) for low-latency live streaming.
-- Ensure instantaneous real-time MJPEG chunk dispatching to web clients.
-- Validate type safety with `npm run build` and run test suite with `npm test`.
-
+- Enforce facial recognition processing and HUD overlay annotation on the Raspberry Pi before distributing video streams to local and remote subscribers
+- Introduce PresenceTracker to handle concurrent multi-person arrival and departure state tracking
+- Capture high-resolution first frame upon person recognition and transmit to Supabase (/supabase detected people)
+- Debounce recurring frames for continuously present occupants, only capturing next first frame when a person leaves and returns later
+- Update SmarterHomeSync to send arrival snapshots and broadcast realtime arrival events
+- Add Recent Recognized Arrivals gallery to SecuritySystem component in smarter-home
+- Update FamilyPresence with real-time first-frame snapshot synchronization
+- Update telemetry API route to record first-frame arrivals into home_states and family_members
+- Add comprehensive unit test suite in smarter-home-pi verifying multi-person concurrency, debouncing, and return arrivals

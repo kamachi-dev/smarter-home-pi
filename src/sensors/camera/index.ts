@@ -7,11 +7,13 @@ import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/i
 import { FaceRecognitionEngine } from './faceRecognition.js';
 import { FrameAnnotator } from './frameAnnotator.js';
 import { StandbyFrameGenerator } from './standbyGenerator.js';
+import { PresenceTracker, PersonArrivalEvent } from './presenceTracker.js';
 import { GpioManager } from '../../hardware/gpio.js';
 import { TapoCameraService } from './tapoClient.js';
 
 export class CameraSensor extends BaseSensor {
   private faceEngine: FaceRecognitionEngine;
+  private presenceTracker: PresenceTracker;
   private tapoService: TapoCameraService;
   private cameraProcess: ChildProcess | null = null;
   private latestFrame: Buffer | null = null;
@@ -32,6 +34,7 @@ export class CameraSensor extends BaseSensor {
   constructor(config: SensorConfig) {
     super(config);
     this.faceEngine = FaceRecognitionEngine.getInstance();
+    this.presenceTracker = PresenceTracker.getInstance();
     this.tapoService = new TapoCameraService({
       host: config.options?.tapoIp || config.options?.ip,
       user: config.options?.tapoUser || config.options?.user,
@@ -343,32 +346,50 @@ export class CameraSensor extends BaseSensor {
   }
 
   /**
-   * Processes each camera frame in real-time and broadcasts to stream subscribers.
+   * Processes each camera frame in real-time.
+   * Ensures facial recognition and annotation is performed before distributing the frame.
    */
   private onNewCameraFrame(rawFrame: Buffer): void {
-    this.latestFrame = rawFrame;
-    this.emit('frame', rawFrame);
-
-    for (const listener of Array.from(this.streamListeners)) {
-      try {
-        listener(rawFrame);
-      } catch {}
-    }
-
-    // Trigger asynchronous face detection on raw frame if engine is idle
+    // If recognition engine is idle, process immediately so HUD annotation is always up to date
     if (!this.isProcessingFace) {
       this.processFaceRecognitionAsync(rawFrame);
+    } else {
+      // If recognition is currently calculating previous frame, annotate with latest known detection
+      const annotated = FrameAnnotator.annotateFrame(rawFrame, this.currentDetection);
+      this.broadcastFrame(annotated);
     }
   }
 
-  private async processFaceRecognitionAsync(frame: Buffer): Promise<void> {
+  private broadcastFrame(frame: Buffer): void {
+    this.latestFrame = frame;
+    this.emit('frame', frame);
+
+    for (const listener of Array.from(this.streamListeners)) {
+      try {
+        listener(frame);
+      } catch {}
+    }
+  }
+
+  private async processFaceRecognitionAsync(rawFrame: Buffer): Promise<void> {
     this.isProcessingFace = true;
     try {
-      const detection = await this.faceEngine.recognizeFrame(frame);
+      const detection = await this.faceEngine.recognizeFrame(rawFrame);
       this.currentDetection = detection;
       this.emit('face_detection', detection);
+
+      // Annotate frame with AI recognition boxes, reticles, labels & HUD
+      const annotatedFrame = FrameAnnotator.annotateFrame(rawFrame, detection);
+      this.broadcastFrame(annotatedFrame);
+
+      // Evaluate PresenceTracker to capture FIRST FRAME of any newly recognized people
+      const newlyArrived = this.presenceTracker.processDetection(detection, annotatedFrame);
+      for (const arrival of newlyArrived) {
+        this.emit('person_arrival', arrival);
+      }
     } catch (err) {
       console.error('[CameraSensor] Face recognition error:', (err as Error).message);
+      this.broadcastFrame(rawFrame);
     } finally {
       this.isProcessingFace = false;
     }
@@ -384,13 +405,12 @@ export class CameraSensor extends BaseSensor {
     this.emit('face_detection', detection);
 
     const annotatedFrame = FrameAnnotator.annotateFrame(frameBuffer, detection);
-    this.latestFrame = annotatedFrame;
-    this.emit('frame', annotatedFrame);
+    this.broadcastFrame(annotatedFrame);
 
-    for (const listener of Array.from(this.streamListeners)) {
-      try {
-        listener(annotatedFrame);
-      } catch {}
+    // Evaluate PresenceTracker for first frame
+    const newlyArrived = this.presenceTracker.processDetection(detection, annotatedFrame);
+    for (const arrival of newlyArrived) {
+      this.emit('person_arrival', arrival);
     }
 
     return { detection, annotatedFrame };
