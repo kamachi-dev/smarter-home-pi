@@ -1,5 +1,5 @@
-﻿fix(routes): resolve Fastify FST_ERR_DUPLICATED_ROUTE by consolidating /api/rooms
+﻿feat(sync): route room queries through central smarter-home server API with token
 
-- Removed duplicate /api/rooms registration in Fastify routes
-- Consolidated single /api/rooms endpoint with direct Supabase room synchronization and fallback
-- Verified 100% build and test pass
+- Configured SmarterHomeSync to query the main smarter-home server API (/api/rooms) using x-pi-token
+- Added automatic fallback to direct Supabase rooms query
+- Verified 100% build pass and unit tests

@@ -96,17 +96,48 @@ export class SmarterHomeSync {
   }
 
   public async syncRoomsFromSupabase(): Promise<void> {
-    if (!this.supabase) return;
-    try {
-      const homeId = await this.getLinkedHomeId();
-      if (!homeId) return;
+    let rooms: any[] | null = null;
 
-      const { data: rooms, error } = await this.supabase
-        .from('rooms')
-        .select('*')
-        .eq('home_id', homeId);
+    // 1. Primary: Fetch rooms from the smarter-home central server API
+    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
+      try {
+        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
+        const res = await fetch(targetUrl, {
+          headers: {
+            'x-pi-token': config.smarterHomeToken,
+            'x-pi-api-key': config.smarterHomeApiKey
+          },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          if (data && Array.isArray(data.rooms) && data.rooms.length > 0) {
+            rooms = data.rooms;
+          }
+        }
+      } catch (err) {
+        console.warn('[SmarterHomeSync] Server API /api/rooms fetch warning:', (err as Error).message);
+      }
+    }
 
-      if (!error && rooms && Array.isArray(rooms)) {
+    // 2. Direct Supabase fallback
+    if (!rooms && this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        if (homeId) {
+          const { data: dbRooms, error } = await this.supabase
+            .from('rooms')
+            .select('*')
+            .eq('home_id', homeId);
+          if (!error && dbRooms && Array.isArray(dbRooms)) {
+            rooms = dbRooms;
+          }
+        }
+      } catch {}
+    }
+
+    if (rooms && Array.isArray(rooms)) {
+      try {
         this.cachedRooms = rooms;
         for (const room of rooms) {
           const camSensorId = `sensor-cam-${room.id}`;
@@ -153,9 +184,9 @@ export class SmarterHomeSync {
         if (this.registry.getSensor('sensor-cam-1')) {
           await this.registry.unregisterSensor('sensor-cam-1', false);
         }
+      } catch (err) {
+        console.warn('[SmarterHomeSync] Failed to sync rooms cameras from Supabase:', (err as Error).message);
       }
-    } catch (err) {
-      console.warn('[SmarterHomeSync] Failed to sync rooms cameras from Supabase:', (err as Error).message);
     }
   }
 
@@ -210,17 +241,44 @@ export class SmarterHomeSync {
   private cachedRooms: any[] = [];
 
   public async getRooms(): Promise<any[]> {
-    if (this.cachedRooms.length > 0) return this.cachedRooms;
-    if (!this.supabase) return [];
-    try {
-      const homeId = await this.getLinkedHomeId();
-      if (!homeId) return [];
-      const { data } = await this.supabase.from('rooms').select('*').eq('home_id', homeId);
-      this.cachedRooms = data || [];
-      return this.cachedRooms;
-    } catch {
-      return [];
+    // 1. Primary: Fetch from Smarter Home server API endpoint
+    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
+      try {
+        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
+        const res = await fetch(targetUrl, {
+          headers: {
+            'x-pi-token': config.smarterHomeToken,
+            'x-pi-api-key': config.smarterHomeApiKey
+          },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          if (data && Array.isArray(data.rooms) && data.rooms.length > 0) {
+            this.cachedRooms = data.rooms;
+            return this.cachedRooms;
+          }
+        }
+      } catch (err) {
+        console.warn('[SmarterHomeSync] Smarter-Home server /api/rooms HTTP fetch warning:', (err as Error).message);
+      }
     }
+
+    // 2. Direct Supabase fallback
+    if (this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        if (homeId) {
+          const { data } = await this.supabase.from('rooms').select('*').eq('home_id', homeId);
+          if (data && Array.isArray(data) && data.length > 0) {
+            this.cachedRooms = data;
+            return this.cachedRooms;
+          }
+        }
+      } catch {}
+    }
+
+    return this.cachedRooms;
   }
 
   private async getLinkedHomeId(): Promise<string | null> {
