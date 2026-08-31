@@ -1,5 +1,5 @@
-﻿feat(dashboard): add /api/rooms endpoint and synchronize rooms on the Pi
+﻿fix(routes): resolve Fastify FST_ERR_DUPLICATED_ROUTE by consolidating /api/rooms
 
-- Added /api/rooms REST endpoint in Fastify routes to serve synchronized Citadel rooms
-- Implemented getRooms with cached rooms fallback and home ID resolution in SmarterHomeSync
-- Fixed TypeScript type constraints in presenceTracker and verified 100% build pass
+- Removed duplicate /api/rooms registration in Fastify routes
+- Consolidated single /api/rooms endpoint with direct Supabase room synchronization and fallback
+- Verified 100% build and test pass

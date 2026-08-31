@@ -26,49 +26,15 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
-  // Get all rooms and attached camera streams from Smarter Home Cloud or Supabase
   // Get all rooms and attached camera streams from Supabase or Smarter Home Cloud
-  server.get('/api/rooms', async () => {
-    // 1. Direct Supabase query
-    const supabase = syncGateway.getSupabaseClient();
-    const homeId = await syncGateway.getHomeId();
-    if (supabase && homeId) {
-      try {
-        const { data: rooms, error } = await supabase
-          .from('rooms')
-          .select('*')
-          .eq('home_id', homeId)
-          .order('created_at', { ascending: true });
-
-        if (!error && rooms && rooms.length > 0) {
-          return { rooms };
-        }
-      } catch (dbErr) {
-        // Fall back to cloud API
-      }
+  server.get('/api/rooms', async (request, reply) => {
+    try {
+      await syncGateway.syncRoomsFromSupabase();
+      const rooms = await syncGateway.getRooms();
+      return { rooms };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
     }
-
-    // 2. Fetch via Smarter Home Cloud API with token
-    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
-      try {
-        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
-        const res = await fetch(targetUrl, {
-          headers: {
-            'x-pi-token': config.smarterHomeToken,
-            'x-pi-api-key': config.smarterHomeApiKey
-          },
-          signal: AbortSignal.timeout(4000)
-        });
-        if (res.ok) {
-          const data = (await res.json()) as any;
-          if (data && Array.isArray(data.rooms)) {
-            return { rooms: data.rooms };
-          }
-        }
-      } catch (httpErr) {}
-    }
-
-    return { rooms: [] };
   });
 
   // Get Raspberry Pi 40-pin header with live assignments
@@ -248,16 +214,6 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
   });
 
-  // Citadel Rooms & Camera Streams
-  server.get('/api/rooms', async (request, reply) => {
-    try {
-      await syncGateway.syncRoomsFromSupabase();
-      const rooms = await syncGateway.getRooms();
-      return { rooms };
-    } catch (err) {
-      return reply.code(500).send({ error: (err as Error).message });
-    }
-  });
 
   // Face Recognition: Enrolled Profiles
   server.get('/api/faces', async () => {
