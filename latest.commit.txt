@@ -1,5 +1,6 @@
-﻿feat(security): stream switching per room in SecuritySystem
+﻿fix(face-recognition): tune neural detector sensitivity, multi-resolution scaling, and model loading
 
-- Broadcast per-room processed AI streams concurrently in smarterHomeSync loop
-- Strictly switch between room camera feeds in SecuritySystem dashboard based on selected room tab
-- Prioritize dynamic room cameras in selector pill list
+- Lowered TinyFaceDetector scoreThreshold from 0.45 to 0.25 (with 0.20 fallback) to detect angled, seated, or distant faces
+- Added multi-resolution inputSize scaling (416 -> 320) for wide-angle room security cameras
+- Added optional SSD MobileNet neural model fallback loading
+- Validated all tests and TypeScript compilation

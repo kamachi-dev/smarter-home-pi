@@ -49,6 +49,11 @@ export class FaceRecognitionEngine {
       await faceapi.nets.tinyFaceDetector.loadFromDisk(modelDir);
       await faceapi.nets.faceLandmark68TinyNet.loadFromDisk(modelDir);
       await faceapi.nets.faceRecognitionNet.loadFromDisk(modelDir);
+      try {
+        if (faceapi.nets.ssdMobilenetv1) {
+          await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelDir);
+        }
+      } catch {}
 
       this.isInitialized = true;
       console.log('[FaceRecognitionEngine] Real neural models (TinyFaceDetector + FaceLandmark68 + FaceRecognitionNet) loaded successfully!');
@@ -259,10 +264,19 @@ export class FaceRecognitionEngine {
     }
 
     try {
-      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 });
-      const detections = await faceapi.detectAllFaces(tensor, detectorOptions)
+      // Use scoreThreshold 0.25 to catch distant, angled, or low-light faces in room cameras
+      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.25 });
+      let detections = await faceapi.detectAllFaces(tensor, detectorOptions)
         .withFaceLandmarks(true)
         .withFaceDescriptors();
+
+      // Fallback with standard 320 size if 416 returned empty
+      if (!detections || detections.length === 0) {
+        const fallbackOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.20 });
+        detections = await faceapi.detectAllFaces(tensor, fallbackOptions)
+          .withFaceLandmarks(true)
+          .withFaceDescriptors();
+      }
 
       if (!detections || detections.length === 0) {
         return {
