@@ -1,4 +1,4 @@
-﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SensorRegistry } from '../sensors/registry.js';
 import { FaceRecognitionEngine } from '../sensors/camera/faceRecognition.js';
 import { SensorReading, FaceDetectionPayload, TemperatureReading } from '../types/index.js';
@@ -368,5 +368,13 @@ export class SmarterHomeSync {
 
   public getStatus(): SyncStatus {
     return { ...this.status };
+  }
+
+  public getSupabaseClient(): SupabaseClient | null {
+    return this.supabase;
+  }
+
+  public async getHomeId(): Promise<string | null> {
+    return this.getLinkedHomeId();
   }
 }

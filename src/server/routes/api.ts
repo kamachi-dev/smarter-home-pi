@@ -26,6 +26,29 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
+  // Get all rooms and attached camera streams from Supabase
+  server.get('/api/rooms', async () => {
+    const supabase = syncGateway.getSupabaseClient();
+    const homeId = await syncGateway.getHomeId();
+    if (!supabase || !homeId) {
+      return { rooms: [] };
+    }
+    try {
+      const { data: rooms, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('home_id', homeId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        return { rooms: [], error: error.message };
+      }
+      return { rooms: rooms || [] };
+    } catch (err) {
+      return { rooms: [], error: (err as Error).message };
+    }
+  });
+
   // Get Raspberry Pi 40-pin header with live assignments
   server.get('/api/pins', async () => {
     return {

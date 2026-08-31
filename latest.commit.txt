@@ -1,5 +1,6 @@
-﻿feat(camera): room-scoped live frame broadcasting & RTSP isolation
+﻿feat(dashboard): show all citadel rooms and connected camera streams on pi
 
-- Update CameraSyncHandler.sendLiveFrame with roomId parameter for room-isolated Supabase broadcasting
-- Record room-specific live frames to home_states under camera_feed_${roomId} key
-- Retain backward compatibility for default camera feeds and multi-person presence tracking
+- Add /api/rooms endpoint to query synchronized rooms from Supabase for the linked home
+- Render Citadel Rooms & RTSP Cameras section on the Raspberry Pi web dashboard
+- Display real-time room metadata, temperature targets, humidity, RTSP stream URL, and IP connection status
+- Auto-refresh room list on dashboard initialization and provide manual refresh button

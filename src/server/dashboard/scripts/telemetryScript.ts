@@ -4,6 +4,7 @@ export const telemetryScript = `
       sensors: [],
       readings: {},
       faces: [],
+      rooms: [],
       currentFaceDetection: { detected: false, status: 'none', person: null, confidence: 0, timestamp: new Date().toISOString() },
       selectedTrainingPhotos: []
     };
@@ -16,7 +17,75 @@ export const telemetryScript = `
       try { await fetchStatus(); } catch (e) {}
       try { await fetchPins(); } catch (e) {}
       try { await fetchFaces(); } catch (e) {}
+      try { await fetchRooms(); } catch (e) {}
     }
+
+    async function fetchRooms() {
+      try {
+        const res = await fetch('/api/rooms');
+        const data = await res.json();
+        state.rooms = data.rooms || [];
+        renderRoomsList();
+      } catch (err) {
+        console.warn('Failed to fetch rooms:', err);
+      }
+    }
+
+    function renderRoomsList() {
+      const container = document.getElementById('rooms-camera-grid');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!state.rooms || state.rooms.length === 0) {
+        container.innerHTML = '<div class="col-span-2 text-center py-6 text-stone-500 text-xs italic">No Citadel rooms synced yet. Link Home Token to pull rooms from Supabase.</div>';
+        return;
+      }
+
+      state.rooms.forEach(room => {
+        const card = document.createElement('div');
+        card.className = 'relative overflow-hidden rounded-xl border border-stone-800 bg-stone-950/70 p-3.5 space-y-2.5 transition-all hover:border-amber-500/30';
+
+        const hasCam = Boolean(room.camera_enabled);
+        const camIp = room.camera_ip || '';
+        const streamUrl = room.camera_stream_url || (camIp ? 'rtsp://' + (room.camera_username ? room.camera_username + ':***@' : '') + camIp + ':554/stream1' : '');
+
+        card.innerHTML = \`
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-white tracking-wide">\${room.name}</span>
+                \${hasCam ? '<span class="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">RTSP LIVE</span>' : '<span class="px-1.5 py-0.5 rounded text-[8px] font-mono text-stone-500 bg-stone-900 border border-stone-800">NO CAM</span>'}
+              </div>
+              <p class="text-[10px] text-stone-400 truncate max-w-[200px] mt-0.5">\${room.description || 'Spatial Citadel Zone'}</p>
+            </div>
+            <div class="text-right font-mono text-[9px] text-stone-400">
+              <span>\${Number(room.temperature || 22.0).toFixed(1)}°C</span> • <span>\${room.humidity || 45}%</span>
+            </div>
+          </div>
+
+          \${hasCam ? \`
+            <div class="p-2 rounded-lg bg-stone-900/90 border border-stone-800 space-y-1">
+              <div class="flex justify-between items-center text-[9px] font-mono">
+                <span class="text-stone-400">IP: <strong class="text-emerald-400">\${camIp}</strong></span>
+                <span class="text-stone-500">Port 554</span>
+              </div>
+              <div class="text-[8.5px] font-mono text-stone-500 truncate" title="\${streamUrl}">
+                \${streamUrl}
+              </div>
+            </div>
+          \` : \`
+            <div class="p-2 rounded-lg bg-stone-900/40 border border-stone-850/60 text-[9px] text-stone-500 italic">
+              Camera unattached. Configure in Smarter Home.
+            </div>
+          \`}
+        \`;
+
+        container.appendChild(card);
+      });
+    }
+
+    window.fetchRooms = fetchRooms;
+    window.renderRoomsList = renderRoomsList;
 
     async function fetchStatus() {
       try {
