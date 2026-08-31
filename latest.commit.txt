@@ -1,11 +1,11 @@
-fix(security): fix undefined updatedLogs bug causing silent detection log failures
+feat(security): upload detection snapshots to Supabase Storage bucket
 
-- cameraSyncHandler.ts: Fixed critical bug where `updatedLogs` was referenced but
-  never defined — `newSecurityLog` was constructed but never prepended to
-  `currentLogs` before the Supabase upsert, causing a ReferenceError at runtime
-  and silently dropping every detection log write
-- cameraSyncHandler.ts: Replaced invalid `.catch()` chained on PostgrestFilterBuilder
-  (unsupported in @supabase/supabase-js) with a proper try/catch block in the
-  single-row fallback upsert path
-- Both Supabase direct path (via Pi's Supabase client) and HTTP telemetry fallback
-  path now correctly write detection entries to home_states.logs with snapshot image
+- Created 'snapshots' public bucket in Supabase Storage (5MB limit, jpeg/png/webp)
+- Added RLS policies: public read, authenticated insert, delete for snapshots bucket
+- cameraSyncHandler.ts: sendFirstFrameArrival now uploads detection frame to
+  snapshots/{homeId}/{detectionId}.jpg in Supabase Storage before writing log entry
+- Stores the public Storage URL in home_states.logs snapshot field instead of
+  embedding raw base64 strings (keeps DB lean, images properly accessible via CDN)
+- Falls back to base64 inline if Storage upload fails (e.g. offline/quota)
+- detectedPersonRecord.firstFrameImage also updated to Storage URL so broadcast
+  payload contains the URL rather than a large base64 string

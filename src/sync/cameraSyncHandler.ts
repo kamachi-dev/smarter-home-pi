@@ -113,6 +113,7 @@ export class CameraSyncHandler {
 
   /**
    * Dispatches the FIRST FRAME of a newly recognized person upon arrival to Supabase.
+   * Uploads snapshot to Supabase Storage 'snapshots' bucket and stores the public URL in logs.
    */
   public async sendFirstFrameArrival(
     arrival: { person: string; confidence: number; frame: Buffer; timestamp: string; box?: any },
@@ -122,7 +123,7 @@ export class CameraSyncHandler {
     const isoNow = arrival.timestamp || new Date().toISOString();
     const base64Image = `data:image/jpeg;base64,${arrival.frame.toString('base64')}`;
 
-    console.log(`[CameraSyncHandler] 📸 Transmitting FIRST-FRAME for "${arrival.person}" to Supabase (/supabase detected people)...`);
+    console.log(`[CameraSyncHandler] 📸 Transmitting FIRST-FRAME for "${arrival.person}" to Supabase Storage + home_states...`);
 
     const detectedPersonRecord = {
       id: `detect-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -166,7 +167,34 @@ export class CameraSyncHandler {
           const currentList = Array.isArray(existingState?.value) ? existingState.value : [];
           const updatedList = [detectedPersonRecord, ...currentList.filter((p: any) => p.name !== arrival.person || (Date.now() - new Date(p.timestamp).getTime() > 60000))].slice(0, 25);
 
-          // Also automatically append to Security Logs with snapshot
+          // Upload snapshot to Supabase Storage snapshots bucket
+          let snapshotUrl: string = base64Image; // fallback to base64 if upload fails
+          try {
+            const snapshotPath = `${homeId}/${detectedPersonRecord.id}.jpg`;
+            const { error: uploadErr } = await this.supabase.storage
+              .from('snapshots')
+              .upload(snapshotPath, arrival.frame, {
+                contentType: 'image/jpeg',
+                upsert: false
+              });
+
+            if (!uploadErr) {
+              const { data: urlData } = this.supabase.storage
+                .from('snapshots')
+                .getPublicUrl(snapshotPath);
+              if (urlData?.publicUrl) {
+                snapshotUrl = urlData.publicUrl;
+                detectedPersonRecord.firstFrameImage = snapshotUrl;
+                console.log(`[CameraSyncHandler] 🗂️ Snapshot uploaded to Storage: ${snapshotPath}`);
+              }
+            } else {
+              console.warn('[CameraSyncHandler] ⚠️ Snapshot upload failed, falling back to base64:', uploadErr.message);
+            }
+          } catch (uploadEx) {
+            console.warn('[CameraSyncHandler] ⚠️ Snapshot upload exception, falling back to base64:', (uploadEx as Error).message);
+          }
+
+          // Append to Security Logs with snapshot URL
           const timeStr = new Date(isoNow).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           const eventTitle = isStranger
             ? `Intruder Alert: Unrecognized Person Detected`
@@ -179,7 +207,7 @@ export class CameraSyncHandler {
             event: eventTitle,
             location: sensorName || 'Room Camera',
             severity: logSeverity,
-            snapshot: base64Image,
+            snapshot: snapshotUrl,
             person: arrival.person,
             confidence: arrival.confidence
           };
