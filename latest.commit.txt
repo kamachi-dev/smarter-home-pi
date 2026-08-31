@@ -1,7 +1,6 @@
-﻿feat(dashboard): remove redundant top footage & support token-based room sync
+﻿feat(rooms): fix token-linked room fetching from Supabase and Cloud API
 
-- Remove redundant top camera video stream card and replace with compact AI Face ID telemetry summary
-- Update GET /api/rooms on Pi to authenticate with Smarter Home cloud using permanent home token
-- Update smarter-home GET /api/rooms Route Handler to support x-pi-token header, resolving home_id and returning all citadel rooms
-- Ensure graceful fallback to direct Supabase client if offline
-- Update dashboard unit tests in smarter-home-pi
+- Add Supabase RLS policy "Tokens can view home rooms" allowing token-linked homes to query rooms
+- Update GET /api/rooms on Pi to query Supabase directly for linked home with fallback to cloud API
+- Bypass user RLS on smarter-home GET /api/rooms when authenticated with valid x-pi-token
+- Verified instant fetch of all 5 rooms (Living Room, Kitchen, Master Bedroom, Dining Room, Garage & Workshop)

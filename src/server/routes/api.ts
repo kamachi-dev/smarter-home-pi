@@ -27,8 +27,28 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
   });
 
   // Get all rooms and attached camera streams from Smarter Home Cloud or Supabase
+  // Get all rooms and attached camera streams from Supabase or Smarter Home Cloud
   server.get('/api/rooms', async () => {
-    // 1. Try fetching via Smarter Home Cloud API with token
+    // 1. Direct Supabase query
+    const supabase = syncGateway.getSupabaseClient();
+    const homeId = await syncGateway.getHomeId();
+    if (supabase && homeId) {
+      try {
+        const { data: rooms, error } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('home_id', homeId)
+          .order('created_at', { ascending: true });
+
+        if (!error && rooms && rooms.length > 0) {
+          return { rooms };
+        }
+      } catch (dbErr) {
+        // Fall back to cloud API
+      }
+    }
+
+    // 2. Fetch via Smarter Home Cloud API with token
     if (config.smarterHomeApiUrl && config.smarterHomeToken) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
@@ -45,31 +65,10 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
             return { rooms: data.rooms };
           }
         }
-      } catch (httpErr) {
-        // Fall back to Supabase direct
-      }
+      } catch (httpErr) {}
     }
 
-    // 2. Fall back to direct Supabase client
-    const supabase = syncGateway.getSupabaseClient();
-    const homeId = await syncGateway.getHomeId();
-    if (!supabase || !homeId) {
-      return { rooms: [] };
-    }
-    try {
-      const { data: rooms, error } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('home_id', homeId)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        return { rooms: [], error: error.message };
-      }
-      return { rooms: rooms || [] };
-    } catch (err) {
-      return { rooms: [], error: (err as Error).message };
-    }
+    return { rooms: [] };
   });
 
   // Get Raspberry Pi 40-pin header with live assignments
