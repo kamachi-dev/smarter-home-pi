@@ -90,170 +90,49 @@ export class CameraSensor extends BaseSensor {
 
   private tryNextCaptureStrategy(): void {
     const customStreamUrl = this.config.options?.streamUrl || this.config.options?.camera_stream_url;
-    const targetHost = this.config.options?.ip || this.config.options?.tapoIp || (customStreamUrl ? null : this.tapoService.host);
-    const strategies: Array<{ name: string; cmd: string; args: string[] }> = [];
-
-    if (customStreamUrl) {
-      // Build variants for auth format & ports
-      const rawUser = this.config.options?.user;
-      const rawPass = this.config.options?.password;
-      const ip = this.config.options?.ip;
-
-      strategies.push(
-        {
-          name: `Room RTSP Stream (TCP) [${this.config.name}]`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_flags', 'prefer_tcp',
-            '-rtsp_transport', 'tcp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', customStreamUrl,
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        },
-        {
-          name: `Room RTSP Stream (UDP) [${this.config.name}]`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_transport', 'udp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', customStreamUrl,
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        }
-      );
-
-      if (rawUser && rawPass && ip) {
-        // Variant: Lowercase username (Tapo camera accounts are sometimes lowercase)
-        const lowerUserUrl = `rtsp://${encodeURIComponent(rawUser.toLowerCase())}:${encodeURIComponent(rawPass)}@${ip}:554/stream1`;
-        strategies.push({
-          name: `Room RTSP Stream (Lowercase User: ${rawUser.toLowerCase()}) [${this.config.name}]`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_flags', 'prefer_tcp',
-            '-rtsp_transport', 'tcp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', lowerUserUrl,
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        });
-
-        // Variant: Port 2020 (ONVIF RTSP port on Tapo cameras)
-        const onvifUrl = `rtsp://${encodeURIComponent(rawUser)}:${encodeURIComponent(rawPass)}@${ip}:2020/stream1`;
-        strategies.push({
-          name: `Room RTSP Stream (Port 2020 ONVIF) [${this.config.name}]`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_flags', 'prefer_tcp',
-            '-rtsp_transport', 'tcp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', onvifUrl,
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        });
-      }
-    } else if (targetHost) {
-      strategies.push(
-        {
-          name: `Tapo RTSP Stream1 HD (${targetHost})`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_flags', 'prefer_tcp',
-            '-rtsp_transport', 'tcp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', this.tapoService.getRtspStreamUrl('stream1', 554),
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        },
-        {
-          name: `Tapo RTSP Stream2 SD (${targetHost})`,
-          cmd: 'ffmpeg',
-          args: [
-            '-hide_banner', '-loglevel', 'warning',
-            '-rtsp_flags', 'prefer_tcp',
-            '-rtsp_transport', 'tcp',
-            '-avioflags', 'direct',
-            '-fflags', 'nobuffer+discardcorrupt',
-            '-flags', 'low_delay',
-            '-max_delay', '500000',
-            '-analyzeduration', '1000000', '-probesize', '1000000',
-            '-i', this.tapoService.getRtspStreamUrl('stream2', 554),
-            '-vf', 'scale=640:480',
-            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-          ]
-        }
-      );
-    }
-
-    if (strategies.length === 0 || this.captureStrategyIndex >= strategies.length) {
-      console.warn(`[CameraSensor] Camera reconnect cycle completed for "${this.config.name}".`);
+    if (!customStreamUrl) {
       this.startStandbyFrameGenerator();
-      this.captureStrategyIndex = 0;
-      setTimeout(() => {
-        if (this.isRunning) this.tryNextCaptureStrategy();
-      }, 3000);
       return;
     }
 
-    const current = strategies[this.captureStrategyIndex];
-    console.log(`[CameraSensor] Connecting to camera [${current.name}]...`);
+    // Match VLC's standard RTSP connection options
+    const ffmpegArgs = [
+      '-hide_banner', '-loglevel', 'warning',
+      '-rtsp_transport', 'tcp',
+      '-i', customStreamUrl,
+      '-vf', 'scale=640:480',
+      '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+    ];
+
+    console.log(`[CameraSensor] Ingesting stream for "${this.config.name}"...`);
     const startTime = Date.now();
 
     try {
-      this.cameraProcess = spawn(current.cmd, current.args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      this.attachMjpegStreamParser(this.cameraProcess, startTime, current.name);
+      this.cameraProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      this.attachMjpegStreamParser(this.cameraProcess, startTime, this.config.name);
 
       if (this.cameraProcess.stderr) {
         this.cameraProcess.stderr.on('data', (data: Buffer) => {
           const msg = data.toString().trim();
           if (msg) {
-            console.log(`[TapoStream: ${current.cmd}]`, msg);
-            if (msg.includes('Connection refused') || msg.includes('401 Unauthorized')) {
-              console.warn(`[CameraSensor] ℹ️ Tapo Setup Tip: If port 554/2020 refuses connection, ensure "Camera Account" is enabled in the Tapo App (Camera Settings > Advanced Settings > Camera Account).`);
-            }
+            console.log(`[CameraSensor: ${this.config.name}]`, msg);
           }
         });
       }
 
       this.cameraProcess.on('error', (err) => {
-        console.warn(`[CameraSensor] ${current.cmd} spawn error (${err.message}). Trying next Tapo strategy...`);
-        this.captureStrategyIndex++;
-        this.tryNextCaptureStrategy();
+        console.warn(`[CameraSensor] ffmpeg process error: ${err.message}`);
+        this.startStandbyFrameGenerator();
+        setTimeout(() => {
+          if (this.isRunning) this.tryNextCaptureStrategy();
+        }, 5000);
       });
     } catch (err) {
-      console.warn(`[CameraSensor] Failed to spawn ${current.cmd}: ${(err as Error).message}`);
-      this.captureStrategyIndex++;
-      this.tryNextCaptureStrategy();
+      console.warn(`[CameraSensor] Failed to spawn ffmpeg: ${(err as Error).message}`);
+      this.startStandbyFrameGenerator();
+      setTimeout(() => {
+        if (this.isRunning) this.tryNextCaptureStrategy();
+      }, 5000);
     }
   }
 

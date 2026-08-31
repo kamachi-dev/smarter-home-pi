@@ -1,4 +1,4 @@
-﻿fix(cameras): add auth variants (lowercase username, ONVIF port 2020) for 401 Unauthorized
+﻿fix(cameras): simplify ffmpeg RTSP arguments to match VLC standard connection
 
-- Add fallback variations to CameraSensor for Tapo camera accounts (exact case, lowercase user, port 554 and port 2020)
-- Handle Tapo RTSP authentication quirks gracefully
+- Removed aggressive low-delay/buffer-discarding ffmpeg flags that interfered with Tapo RTSP DESCRIBE/SETUP handshakes
+- Use standard TCP transport matching VLC configuration
