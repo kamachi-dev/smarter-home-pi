@@ -110,17 +110,20 @@ export class SmarterHomeSync {
         for (const room of rooms) {
           const camSensorId = `sensor-cam-${room.id}`;
           if (room.camera_enabled && room.camera_ip) {
-            const streamUrl = room.camera_stream_url || (
-              room.camera_ip ? `rtsp://${room.camera_username ? encodeURIComponent(room.camera_username) + (room.camera_password ? ':' + encodeURIComponent(room.camera_password) : '') + '@' : ''}${room.camera_ip}:554/stream1` : undefined
-            );
+            const hasAuth = Boolean(room.camera_username && room.camera_password);
+            const authPrefix = hasAuth
+              ? `${encodeURIComponent(room.camera_username)}:${encodeURIComponent(room.camera_password)}@`
+              : (room.camera_username ? `${encodeURIComponent(room.camera_username)}@` : '');
+            const realStreamUrl = `rtsp://${authPrefix}${room.camera_ip}:554/stream1`;
 
             const existing = this.registry.getSensor(camSensorId);
             const needsUpdate = !existing || 
-              existing.config.options?.streamUrl !== streamUrl || 
+              existing.config.options?.streamUrl !== realStreamUrl || 
               existing.config.options?.ip !== room.camera_ip;
 
             if (needsUpdate) {
-              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip}) -> [${streamUrl}]`);
+              const displayUrl = `rtsp://${room.camera_username ? `${room.camera_username}:***@` : ''}${room.camera_ip}:554/stream1`;
+              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip}) -> [${displayUrl}]`);
               await this.registry.registerSensor({
                 id: camSensorId,
                 name: `${room.name} Camera`,
@@ -132,7 +135,7 @@ export class SmarterHomeSync {
                   ip: room.camera_ip,
                   user: room.camera_username,
                   password: room.camera_password,
-                  streamUrl: streamUrl
+                  streamUrl: realStreamUrl
                 }
               }, false);
             }

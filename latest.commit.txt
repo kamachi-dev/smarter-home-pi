@@ -1,5 +1,5 @@
-﻿fix(cameras): remove hardcoded 192.168.68.101 and use room-configured RTSP stream URLs
+﻿fix(cameras): use unmasked RTSP credentials for ffmpeg ingestion
 
-- Removed legacy hardcoded fallback IP (192.168.68.101) from env.ts and CameraSensor capture strategies
-- Ingest camera streams strictly according to room configuration (e.g. 192.168.68.103 for Living Room)
-- Automatically unregister legacy sensor-cam-1 and spawn dedicated room sensors for each room camera
+- Ensure true unmasked password (room.camera_password) is passed to ffmpeg in CameraSensor
+- Update RoomModal to store genuine stream URL rather than literal "***" in camera_stream_url
+- Updated existing Living Room record in Supabase with correct unmasked credentials
