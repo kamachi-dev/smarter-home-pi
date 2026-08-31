@@ -90,151 +90,86 @@ export class CameraSensor extends BaseSensor {
 
   private tryNextCaptureStrategy(): void {
     const customStreamUrl = this.config.options?.streamUrl || this.config.options?.camera_stream_url;
+    const targetHost = this.config.options?.ip || this.config.options?.tapoIp || (customStreamUrl ? null : this.tapoService.host);
     const strategies: Array<{ name: string; cmd: string; args: string[] }> = [];
 
     if (customStreamUrl) {
-      strategies.push({
-        name: `Custom Room RTSP Stream (${this.config.name} - ${customStreamUrl})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', customStreamUrl,
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      });
+      strategies.push(
+        {
+          name: `Room RTSP Stream (TCP) [${this.config.name} - ${customStreamUrl}]`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_flags', 'prefer_tcp',
+            '-rtsp_transport', 'tcp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', customStreamUrl,
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        },
+        {
+          name: `Room RTSP Stream (UDP) [${this.config.name} - ${customStreamUrl}]`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_transport', 'udp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', customStreamUrl,
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        }
+      );
+    } else if (targetHost) {
+      strategies.push(
+        {
+          name: `Tapo RTSP Stream1 HD (${targetHost})`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_flags', 'prefer_tcp',
+            '-rtsp_transport', 'tcp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', this.tapoService.getRtspStreamUrl('stream1', 554),
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        },
+        {
+          name: `Tapo RTSP Stream2 SD (${targetHost})`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_flags', 'prefer_tcp',
+            '-rtsp_transport', 'tcp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', this.tapoService.getRtspStreamUrl('stream2', 554),
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        }
+      );
     }
 
-    strategies.push(
-      {
-        name: `Tapo RTSP Stream1 HD (Port 554, prefer_tcp, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrl('stream1', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream2 SD (Port 554, prefer_tcp, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrl('stream2', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream1 HD (Port 2020 ONVIF, prefer_tcp, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrl('stream1', 2020),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream1 HD (User: CapstoneCam, Port 554, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('CapstoneCam', 'stream1', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream1 HD (User: capstonecam2, Port 554, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('capstonecam2', 'stream1', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream2 SD (User: capstonecam2, Port 554, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_flags', 'prefer_tcp',
-          '-rtsp_transport', 'tcp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrlWithCustomUser('capstonecam2', 'stream2', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      },
-      {
-        name: `Tapo RTSP Stream1 (UDP, Port 554, ${this.tapoService.host})`,
-        cmd: 'ffmpeg',
-        args: [
-          '-hide_banner', '-loglevel', 'warning',
-          '-rtsp_transport', 'udp',
-          '-avioflags', 'direct',
-          '-fflags', 'nobuffer+discardcorrupt',
-          '-flags', 'low_delay',
-          '-max_delay', '500000',
-          '-analyzeduration', '1000000', '-probesize', '1000000',
-          '-i', this.tapoService.getRtspStreamUrl('stream1', 554),
-          '-vf', 'scale=640:480',
-          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-        ]
-      }
-    );
-
-    if (this.captureStrategyIndex >= strategies.length) {
-      console.warn(`[CameraSensor] Tapo camera reconnect cycle completed. Retrying Tapo connection at ${this.tapoService.host}...`);
+    if (strategies.length === 0 || this.captureStrategyIndex >= strategies.length) {
+      console.warn(`[CameraSensor] Camera reconnect cycle completed for "${this.config.name}".`);
       this.startStandbyFrameGenerator();
       this.captureStrategyIndex = 0;
       setTimeout(() => {
@@ -244,7 +179,7 @@ export class CameraSensor extends BaseSensor {
     }
 
     const current = strategies[this.captureStrategyIndex];
-    console.log(`[CameraSensor] Testing Tapo camera strategy ${this.captureStrategyIndex + 1}/${strategies.length}: [${current.name}]...`);
+    console.log(`[CameraSensor] Connecting to camera [${current.name}]...`);
     const startTime = Date.now();
 
     try {

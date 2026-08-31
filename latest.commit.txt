@@ -1,7 +1,5 @@
-﻿feat(cameras): dynamically ingest and process inbound RTSP streams per room record
+﻿fix(cameras): remove hardcoded 192.168.68.101 and use room-configured RTSP stream URLs
 
-- Support custom room RTSP stream URLs in CameraSensor strategies
-- Register dynamic CameraSensor per room in SmarterHomeSync based on Supabase room camera records
-- Support multiple inbound RTSP streams concurrently with facial recognition and bounding box overlays
-- Route multi-room stream parameters in /api/camera/stream?room=roomId
-- Realtime subscription on Supabase rooms table to auto-spawn/update camera sensors when rooms are modified
+- Removed legacy hardcoded fallback IP (192.168.68.101) from env.ts and CameraSensor capture strategies
+- Ingest camera streams strictly according to room configuration (e.g. 192.168.68.103 for Living Room)
+- Automatically unregister legacy sensor-cam-1 and spawn dedicated room sensors for each room camera

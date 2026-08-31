@@ -24,6 +24,10 @@ export class TapoCameraService {
    * Initializes the Tapo camera client connection using tapo-camera-client
    */
   public async init(): Promise<boolean> {
+    if (!this.host) {
+      this.isConnected = false;
+      return false;
+    }
     try {
       console.log(`[TapoCameraService] Connecting to Tapo camera at ${this.host}...`);
       this.tapoClient = new TapoCamera({

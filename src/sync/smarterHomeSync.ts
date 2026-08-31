@@ -115,8 +115,12 @@ export class SmarterHomeSync {
             );
 
             const existing = this.registry.getSensor(camSensorId);
-            if (!existing) {
-              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip})...`);
+            const needsUpdate = !existing || 
+              existing.config.options?.streamUrl !== streamUrl || 
+              existing.config.options?.ip !== room.camera_ip;
+
+            if (needsUpdate) {
+              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip}) -> [${streamUrl}]`);
               await this.registry.registerSensor({
                 id: camSensorId,
                 name: `${room.name} Camera`,
@@ -132,7 +136,18 @@ export class SmarterHomeSync {
                 }
               }, false);
             }
+          } else {
+            // Camera disabled for this room: unregister if exists
+            const existing = this.registry.getSensor(camSensorId);
+            if (existing) {
+              await this.registry.unregisterSensor(camSensorId, false);
+            }
           }
+        }
+
+        // Clean up legacy sensor-cam-1 if dynamic rooms exist
+        if (this.registry.getSensor('sensor-cam-1')) {
+          await this.registry.unregisterSensor('sensor-cam-1', false);
         }
       }
     } catch (err) {
