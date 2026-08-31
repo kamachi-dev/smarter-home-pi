@@ -1,11 +1,5 @@
-﻿feat(camera): pi-first face recognition with first-frame arrival tracking
+﻿feat(camera): room-scoped live frame broadcasting & RTSP isolation
 
-- Enforce facial recognition processing and HUD overlay annotation on the Raspberry Pi before distributing video streams to local and remote subscribers
-- Introduce PresenceTracker to handle concurrent multi-person arrival and departure state tracking
-- Capture high-resolution first frame upon person recognition and transmit to Supabase (/supabase detected people)
-- Debounce recurring frames for continuously present occupants, only capturing next first frame when a person leaves and returns later
-- Update SmarterHomeSync to send arrival snapshots and broadcast realtime arrival events
-- Add Recent Recognized Arrivals gallery to SecuritySystem component in smarter-home
-- Update FamilyPresence with real-time first-frame snapshot synchronization
-- Update telemetry API route to record first-frame arrivals into home_states and family_members
-- Add comprehensive unit test suite in smarter-home-pi verifying multi-person concurrency, debouncing, and return arrivals
+- Update CameraSyncHandler.sendLiveFrame with roomId parameter for room-isolated Supabase broadcasting
+- Record room-specific live frames to home_states under camera_feed_${roomId} key
+- Retain backward compatibility for default camera feeds and multi-person presence tracking

@@ -1,4 +1,4 @@
-﻿import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { FaceDetectionPayload } from '../types/index.js';
 import { config } from '../config/env.js';
 
@@ -26,7 +26,7 @@ export class CameraSyncHandler {
   /**
    * Pushes live processed camera frame (with face recognition squares) to Smarter Home
    */
-  public async sendLiveFrame(frameBuffer: Buffer, faceDetection?: FaceDetectionPayload): Promise<boolean> {
+  public async sendLiveFrame(frameBuffer: Buffer, faceDetection?: FaceDetectionPayload, roomId?: string): Promise<boolean> {
     if (!config.smarterHomeToken) return false;
 
     const now = Date.now();
@@ -54,7 +54,8 @@ export class CameraSyncHandler {
                 payload: {
                   image: base64Image,
                   faceDetection: faceDetection || null,
-                  timestamp: isoTimestamp
+                  timestamp: isoTimestamp,
+                  roomId: roomId || null
                 }
               }]
             })
@@ -62,14 +63,16 @@ export class CameraSyncHandler {
 
           if (now - this.lastStateUpsert > 800) {
             this.lastStateUpsert = now;
+            const feedKey = roomId ? `camera_feed_${roomId}` : 'camera_feed';
             await this.supabase.from('home_states').upsert({
               home_id: homeId,
-              key: 'camera_feed',
+              key: feedKey,
               value: {
                 image: base64Image,
                 faceDetection: faceDetection || null,
                 updatedAt: now,
-                timestamp: isoTimestamp
+                timestamp: isoTimestamp,
+                roomId: roomId || null
               },
               updated_at: isoTimestamp
             }, { onConflict: 'home_id,key' });
@@ -77,7 +80,7 @@ export class CameraSyncHandler {
 
           if (now - this.lastBroadcastLog > 8000) {
             this.lastBroadcastLog = now;
-            console.log(`[CameraSyncHandler] 📡 Broadcasting live camera frames to Supabase (home: ${homeId.substring(0, 8)}...)`);
+            console.log(`[CameraSyncHandler] 📡 Broadcasting live camera frames to Supabase (home: ${homeId.substring(0, 8)}..., room: ${roomId || 'default'})`);
           }
 
           return true;
