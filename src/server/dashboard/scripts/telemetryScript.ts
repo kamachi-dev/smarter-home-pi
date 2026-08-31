@@ -43,11 +43,12 @@ export const telemetryScript = `
 
       state.rooms.forEach(room => {
         const card = document.createElement('div');
-        card.className = 'relative overflow-hidden rounded-xl border border-stone-800 bg-stone-950/70 p-3.5 space-y-2.5 transition-all hover:border-amber-500/30';
+        card.className = 'relative overflow-hidden rounded-xl border border-stone-800 bg-stone-950/70 p-4 space-y-3 transition-all hover:border-amber-500/30';
 
         const hasCam = Boolean(room.camera_enabled);
         const camIp = room.camera_ip || '';
         const streamUrl = room.camera_stream_url || (camIp ? 'rtsp://' + (room.camera_username ? room.camera_username + ':***@' : '') + camIp + ':554/stream1' : '');
+        const roomId = room.id;
 
         card.innerHTML = \`
           <div class="flex justify-between items-start">
@@ -64,6 +65,21 @@ export const telemetryScript = `
           </div>
 
           \${hasCam ? \`
+            <div class="relative aspect-video bg-stone-950 rounded-lg border border-stone-800 overflow-hidden flex items-center justify-center shadow-lg group">
+              <!-- Live Processed Stream Frame -->
+              <img id="room-stream-\${roomId}" src="/api/camera/stream?room=\${roomId}" alt="\${room.name} Stream" class="absolute inset-0 w-full h-full object-cover z-0" onerror="this.onerror=null; this.src='/api/camera/stream';" />
+              
+              <!-- Room HUD Overlay -->
+              <div class="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[8.5px] font-mono text-emerald-400 font-bold z-10">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>\${camIp || 'AI FACE PROCESSED'}</span>
+              </div>
+
+              <div class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/75 backdrop-blur-md border border-white/10 text-[8px] font-mono text-stone-300 z-10">
+                <span>AI PROCESSED STREAM</span>
+              </div>
+            </div>
+
             <div class="p-2 rounded-lg bg-stone-900/90 border border-stone-800 space-y-1">
               <div class="flex justify-between items-center text-[9px] font-mono">
                 <span class="text-stone-400">IP: <strong class="text-emerald-400">\${camIp}</strong></span>
@@ -74,8 +90,12 @@ export const telemetryScript = `
               </div>
             </div>
           \` : \`
-            <div class="p-2 rounded-lg bg-stone-900/40 border border-stone-850/60 text-[9px] text-stone-500 italic">
-              Camera unattached. Configure in Smarter Home.
+            <div class="aspect-video rounded-lg bg-stone-900/40 border border-stone-850/60 flex flex-col items-center justify-center text-center p-4 space-y-1 text-stone-500">
+              <svg class="w-6 h-6 text-stone-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
+              <span class="text-[11px] font-medium text-stone-400">Camera Unassigned</span>
+              <span class="text-[9px] text-stone-600">Assign IP &amp; RTSP credentials in Smarter Home</span>
             </div>
           \`}
         \`;
