@@ -192,9 +192,8 @@ export class CameraSyncHandler {
             .maybeSingle();
 
           const currentLogs = Array.isArray(existingLogsState?.value) ? existingLogsState.value : [];
-          const updatedLogs = [newSecurityLog, ...currentLogs].slice(0, 30);
-
-          await this.supabase.from('home_states').upsert([
+          const updatedLogs = [newSecurityLog, ...currentLogs].slice(0, 50);
+          const { error: upsertErr } = await this.supabase.from('home_states').upsert([
             {
               home_id: homeId,
               key: 'detected_people',
@@ -208,6 +207,23 @@ export class CameraSyncHandler {
               updated_at: isoNow
             }
           ], { onConflict: 'home_id,key' });
+
+          if (upsertErr) {
+            console.error('[CameraSyncHandler] ❌ Supabase home_states upsert error:', upsertErr.message);
+            // Try single row upsert fallback
+            try {
+              await this.supabase.from('home_states').upsert({
+                home_id: homeId,
+                key: 'logs',
+                value: updatedLogs,
+                updated_at: isoNow
+              }, { onConflict: 'home_id,key' });
+            } catch (e) {
+              console.error('[CameraSyncHandler] Single row upsert fallback failed:', (e as Error).message);
+            }
+          } else {
+            console.log(`[CameraSyncHandler] ✅ Saved intruder/arrival log into home_states (home: ${homeId.substring(0, 8)}...)`);
+          }
 
           await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {
             method: 'POST',

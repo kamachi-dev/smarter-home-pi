@@ -1,5 +1,11 @@
-﻿fix(sync): broadcast first frame arrivals across home-security and home-camera channels
+fix(security): fix undefined updatedLogs bug causing silent detection log failures
 
-- Updated sendFirstFrameArrival to broadcast to home-security, home-camera, and home-db-changes
-- Guaranteed reliable arrival event receipt on web dashboard and security views
-- Verified 100% build pass and unit tests
+- cameraSyncHandler.ts: Fixed critical bug where `updatedLogs` was referenced but
+  never defined — `newSecurityLog` was constructed but never prepended to
+  `currentLogs` before the Supabase upsert, causing a ReferenceError at runtime
+  and silently dropping every detection log write
+- cameraSyncHandler.ts: Replaced invalid `.catch()` chained on PostgrestFilterBuilder
+  (unsupported in @supabase/supabase-js) with a proper try/catch block in the
+  single-row fallback upsert path
+- Both Supabase direct path (via Pi's Supabase client) and HTTP telemetry fallback
+  path now correctly write detection entries to home_states.logs with snapshot image
