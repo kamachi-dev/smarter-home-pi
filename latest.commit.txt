@@ -1,5 +1,4 @@
-﻿fix(cameras): use unmasked RTSP credentials for ffmpeg ingestion
+﻿fix(cameras): add auth variants (lowercase username, ONVIF port 2020) for 401 Unauthorized
 
-- Ensure true unmasked password (room.camera_password) is passed to ffmpeg in CameraSensor
-- Update RoomModal to store genuine stream URL rather than literal "***" in camera_stream_url
-- Updated existing Living Room record in Supabase with correct unmasked credentials
+- Add fallback variations to CameraSensor for Tapo camera accounts (exact case, lowercase user, port 554 and port 2020)
+- Handle Tapo RTSP authentication quirks gracefully

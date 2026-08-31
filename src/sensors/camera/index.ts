@@ -94,9 +94,14 @@ export class CameraSensor extends BaseSensor {
     const strategies: Array<{ name: string; cmd: string; args: string[] }> = [];
 
     if (customStreamUrl) {
+      // Build variants for auth format & ports
+      const rawUser = this.config.options?.user;
+      const rawPass = this.config.options?.password;
+      const ip = this.config.options?.ip;
+
       strategies.push(
         {
-          name: `Room RTSP Stream (TCP) [${this.config.name} - ${customStreamUrl}]`,
+          name: `Room RTSP Stream (TCP) [${this.config.name}]`,
           cmd: 'ffmpeg',
           args: [
             '-hide_banner', '-loglevel', 'warning',
@@ -113,7 +118,7 @@ export class CameraSensor extends BaseSensor {
           ]
         },
         {
-          name: `Room RTSP Stream (UDP) [${this.config.name} - ${customStreamUrl}]`,
+          name: `Room RTSP Stream (UDP) [${this.config.name}]`,
           cmd: 'ffmpeg',
           args: [
             '-hide_banner', '-loglevel', 'warning',
@@ -129,6 +134,48 @@ export class CameraSensor extends BaseSensor {
           ]
         }
       );
+
+      if (rawUser && rawPass && ip) {
+        // Variant: Lowercase username (Tapo camera accounts are sometimes lowercase)
+        const lowerUserUrl = `rtsp://${encodeURIComponent(rawUser.toLowerCase())}:${encodeURIComponent(rawPass)}@${ip}:554/stream1`;
+        strategies.push({
+          name: `Room RTSP Stream (Lowercase User: ${rawUser.toLowerCase()}) [${this.config.name}]`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_flags', 'prefer_tcp',
+            '-rtsp_transport', 'tcp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', lowerUserUrl,
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        });
+
+        // Variant: Port 2020 (ONVIF RTSP port on Tapo cameras)
+        const onvifUrl = `rtsp://${encodeURIComponent(rawUser)}:${encodeURIComponent(rawPass)}@${ip}:2020/stream1`;
+        strategies.push({
+          name: `Room RTSP Stream (Port 2020 ONVIF) [${this.config.name}]`,
+          cmd: 'ffmpeg',
+          args: [
+            '-hide_banner', '-loglevel', 'warning',
+            '-rtsp_flags', 'prefer_tcp',
+            '-rtsp_transport', 'tcp',
+            '-avioflags', 'direct',
+            '-fflags', 'nobuffer+discardcorrupt',
+            '-flags', 'low_delay',
+            '-max_delay', '500000',
+            '-analyzeduration', '1000000', '-probesize', '1000000',
+            '-i', onvifUrl,
+            '-vf', 'scale=640:480',
+            '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+          ]
+        });
+      }
     } else if (targetHost) {
       strategies.push(
         {
