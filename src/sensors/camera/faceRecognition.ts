@@ -232,13 +232,16 @@ export class FaceRecognitionEngine {
     const calculatedAccuracy = Math.round((consistencyScore * 0.65 + faceCoverageRatio * 0.35) * 1000) / 10;
 
     const personId = customId || `face-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    const randomPhotoIdx = Math.floor(Math.random() * photos.length);
+    const chosenPfp = photos[randomPhotoIdx];
+
     const enrolledPerson: EnrolledPerson = {
       id: personId,
       name,
       notes: notes || `Trained with ${validDescriptors.length}/${photos.length} verified face photos`,
       enrolledAt: new Date().toISOString(),
       descriptor: normalizedDescriptor,
-      imageUrl: photos[0]?.startsWith('data:') ? photos[0] : undefined,
+      imageUrl: chosenPfp?.startsWith('data:') ? chosenPfp : photos[0],
       accuracy: calculatedAccuracy,
       photoCount: photos.length,
       trainingStats: {

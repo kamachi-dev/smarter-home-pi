@@ -1,6 +1,4 @@
-feat(faces): compute training accuracy metrics and support profile updates
+feat(faces): select random photo from training dataset as primary profile image
 
-- Extended EnrolledPerson interface with accuracy, photoCount, and trainingStats
-- Updated trainPersonWithPhotos in FaceRecognitionEngine to compute descriptor consistency and return 0-100% accuracy score
-- Added updateEnrolledPerson method and PUT /api/faces/:id endpoint
-- Verified TypeScript compilation clean with npm run build
+- Updated face recognition training pipeline to choose a random photo from the uploaded dataset as the default profile image
+- Verified clean build with tsc
