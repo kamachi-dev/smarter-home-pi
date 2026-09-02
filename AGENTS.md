@@ -1,5 +1,9 @@
 # Custom Repository & Agent Rules
 
+## System Ecosystem & Repository Context
+- **`smarter-home`**: The core backend/server and web application frontend repository.
+- **`smarter-home-pi`**: The dedicated Raspberry Pi edge controller / hardware daemon repository.
+
 All agents working on `smarter-home-pi` must strictly adhere to the following rules:
 
 ### 1. Latest Commit Log Rule (`latest.commit.txt`)

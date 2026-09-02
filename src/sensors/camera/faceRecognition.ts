@@ -211,6 +211,26 @@ export class FaceRecognitionEngine {
     const norm = Math.sqrt(sumSq) || 1;
     const normalizedDescriptor = Array.from(composite).map(v => Math.round((v / norm) * 10000) / 10000);
 
+    // Compute accuracy metric based on descriptor consistency to composite centroid & detection success rate
+    let totalDistance = 0;
+    for (const desc of validDescriptors) {
+      let dSum = 0;
+      for (let j = 0; j < descriptorLen; j++) {
+        const diff = desc[j] - normalizedDescriptor[j];
+        dSum += diff * diff;
+      }
+      totalDistance += Math.sqrt(dSum);
+    }
+
+    const avgDistance = totalDistance / validDescriptors.length;
+    // Map Euclidean distance to consistency (typical face match distance is 0.2 - 0.6)
+    // Lower distance = higher consistency
+    const consistencyScore = Math.max(0.5, Math.min(1.0, 1.0 - (avgDistance * 0.8)));
+    const faceCoverageRatio = validDescriptors.length / photos.length;
+    
+    // Overall accuracy percentage: weighted combination of face extraction yield and landmark vector consistency
+    const calculatedAccuracy = Math.round((consistencyScore * 0.65 + faceCoverageRatio * 0.35) * 1000) / 10;
+
     const personId = customId || `face-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const enrolledPerson: EnrolledPerson = {
       id: personId,
@@ -218,7 +238,15 @@ export class FaceRecognitionEngine {
       notes: notes || `Trained with ${validDescriptors.length}/${photos.length} verified face photos`,
       enrolledAt: new Date().toISOString(),
       descriptor: normalizedDescriptor,
-      imageUrl: photos[0]?.startsWith('data:') ? photos[0] : undefined
+      imageUrl: photos[0]?.startsWith('data:') ? photos[0] : undefined,
+      accuracy: calculatedAccuracy,
+      photoCount: photos.length,
+      trainingStats: {
+        validFaces: validDescriptors.length,
+        totalPhotos: photos.length,
+        avgConfidence: Math.round(faceCoverageRatio * 100),
+        consistencyScore: Math.round(consistencyScore * 100)
+      }
     };
 
     const existingIdx = this.enrolledPeople.findIndex(p => p.id === personId || p.name.toLowerCase() === name.toLowerCase());
@@ -229,7 +257,7 @@ export class FaceRecognitionEngine {
     }
 
     this.saveEnrolledPeople();
-    console.log(`[FaceRecognitionEngine] Successfully trained neural profile for "${name}" with ${validDescriptors.length} descriptors!`);
+    console.log(`[FaceRecognitionEngine] Successfully trained neural profile for "${name}" (Accuracy: ${calculatedAccuracy}%, Descriptors: ${validDescriptors.length})!`);
     return enrolledPerson;
   }
 
@@ -395,6 +423,18 @@ export class FaceRecognitionEngine {
     this.enrolledPeople.push(newPerson);
     this.saveEnrolledPeople();
     return newPerson;
+  }
+
+  public updateEnrolledPerson(id: string, updates: Partial<EnrolledPerson>): EnrolledPerson | null {
+    const idx = this.enrolledPeople.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+    this.enrolledPeople[idx] = {
+      ...this.enrolledPeople[idx],
+      ...updates,
+      id: this.enrolledPeople[idx].id // keep original id
+    };
+    this.saveEnrolledPeople();
+    return this.enrolledPeople[idx];
   }
 
   public removeEnrolledPerson(id: string): boolean {

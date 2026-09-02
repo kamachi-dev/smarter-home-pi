@@ -1,11 +1,6 @@
-feat(security): upload detection snapshots to Supabase Storage bucket
+feat(faces): compute training accuracy metrics and support profile updates
 
-- Created 'snapshots' public bucket in Supabase Storage (5MB limit, jpeg/png/webp)
-- Added RLS policies: public read, authenticated insert, delete for snapshots bucket
-- cameraSyncHandler.ts: sendFirstFrameArrival now uploads detection frame to
-  snapshots/{homeId}/{detectionId}.jpg in Supabase Storage before writing log entry
-- Stores the public Storage URL in home_states.logs snapshot field instead of
-  embedding raw base64 strings (keeps DB lean, images properly accessible via CDN)
-- Falls back to base64 inline if Storage upload fails (e.g. offline/quota)
-- detectedPersonRecord.firstFrameImage also updated to Storage URL so broadcast
-  payload contains the URL rather than a large base64 string
+- Extended EnrolledPerson interface with accuracy, photoCount, and trainingStats
+- Updated trainPersonWithPhotos in FaceRecognitionEngine to compute descriptor consistency and return 0-100% accuracy score
+- Added updateEnrolledPerson method and PUT /api/faces/:id endpoint
+- Verified TypeScript compilation clean with npm run build

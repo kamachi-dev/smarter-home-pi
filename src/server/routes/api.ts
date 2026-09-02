@@ -264,6 +264,24 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
   });
 
+  // Face Recognition: Update enrolled person details
+  server.put<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      notes?: string;
+      accuracy?: number;
+    };
+  }>('/api/faces/:id', async (request, reply) => {
+    const { id } = request.params;
+    const updates = request.body || {};
+    const updated = faceEngine.updateEnrolledPerson(id, updates);
+    if (!updated) {
+      return reply.code(404).send({ error: 'Person ID not found.' });
+    }
+    return { success: true, person: updated };
+  });
+
   // Face Recognition: Delete enrolled person
   server.delete<{ Params: { id: string } }>('/api/faces/:id', async (request, reply) => {
     const { id } = request.params;

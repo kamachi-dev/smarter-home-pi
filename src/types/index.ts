@@ -78,6 +78,14 @@ export interface EnrolledPerson {
   enrolledAt: string;
   descriptor?: number[]; // 128-dimensional face embedding array
   imageUrl?: string;
+  accuracy?: number; // 0 to 100 percentage
+  photoCount?: number;
+  trainingStats?: {
+    validFaces: number;
+    totalPhotos: number;
+    avgConfidence: number;
+    consistencyScore: number;
+  };
 }
 
 export interface ControllerState {
