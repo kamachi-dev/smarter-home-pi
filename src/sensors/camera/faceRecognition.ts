@@ -450,6 +450,44 @@ export class FaceRecognitionEngine {
     return false;
   }
 
+  public applyModelDescriptor(modelData: {
+    id: string;
+    name: string;
+    role?: string;
+    notes?: string;
+    descriptor: number[];
+    accuracy?: number;
+    photoCount?: number;
+    imageUrl?: string;
+    trainingStats?: any;
+  }): EnrolledPerson {
+    const existingIdx = this.enrolledPeople.findIndex(
+      p => p.id === modelData.id || p.name.toLowerCase() === modelData.name.toLowerCase()
+    );
+
+    const personProfile: EnrolledPerson = {
+      id: modelData.id,
+      name: modelData.name,
+      notes: modelData.notes || modelData.role || 'Resident',
+      enrolledAt: new Date().toISOString(),
+      descriptor: modelData.descriptor,
+      imageUrl: modelData.imageUrl,
+      accuracy: modelData.accuracy,
+      photoCount: modelData.photoCount,
+      trainingStats: modelData.trainingStats
+    };
+
+    if (existingIdx >= 0) {
+      this.enrolledPeople[existingIdx] = personProfile;
+    } else {
+      this.enrolledPeople.push(personProfile);
+    }
+
+    this.saveEnrolledPeople();
+    console.log(`[FaceRecognitionEngine] 🧠 Applied updated model descriptor for "${modelData.name}" and swapped into active FaceMatcher!`);
+    return personProfile;
+  }
+
   public getEnrolledPeople(): EnrolledPerson[] {
     return [...this.enrolledPeople];
   }

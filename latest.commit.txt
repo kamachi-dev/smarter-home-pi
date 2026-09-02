@@ -1,4 +1,7 @@
-feat(faces): select random photo from training dataset as primary profile image
+feat(sync): add Supabase Realtime automatic model sync and active pipeline hot-swapping
 
-- Updated face recognition training pipeline to choose a random photo from the uploaded dataset as the default profile image
-- Verified clean build with tsc
+- Created `ModelSyncHandler` (`src/sync/modelSyncHandler.ts`) to listen for Supabase storage `models` bucket changes and `family_members` updates in real-time
+- Implemented `applyModelDescriptor` in `FaceRecognitionEngine` to dynamically swap newly trained 128D descriptors into the active `FaceMatcher` without daemon restarts
+- Added initial cloud synchronization on startup to retrieve all cloud-stored model descriptors and family member profiles from Supabase
+- Refactored telemetry handling into `TelemetrySyncHandler` (`src/sync/telemetrySyncHandler.ts`) to keep all sync modules concise and under 500 lines
+- Verified clean compilation with `tsc` on `smarter-home-pi`

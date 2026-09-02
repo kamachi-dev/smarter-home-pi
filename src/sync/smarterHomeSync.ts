@@ -1,8 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SensorRegistry } from '../sensors/registry.js';
 import { FaceRecognitionEngine } from '../sensors/camera/faceRecognition.js';
-import { SensorReading, FaceDetectionPayload, TemperatureReading } from '../types/index.js';
+import { SensorReading, FaceDetectionPayload } from '../types/index.js';
 import { CameraSyncHandler } from './cameraSyncHandler.js';
+import { ModelSyncHandler } from './modelSyncHandler.js';
+import { TelemetrySyncHandler } from './telemetrySyncHandler.js';
 import { config } from '../config/env.js';
 
 export interface SyncStatus {
@@ -20,8 +22,12 @@ export class SmarterHomeSync {
   private faceEngine: FaceRecognitionEngine;
   private supabase: SupabaseClient | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
+  private cameraStreamTimer: NodeJS.Timeout | null = null;
   private cachedHomeId: string | null = null;
+  private cachedRooms: any[] = [];
   private cameraSync: CameraSyncHandler;
+  private modelSync: ModelSyncHandler;
+  private telemetrySync: TelemetrySyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -36,6 +42,15 @@ export class SmarterHomeSync {
     this.faceEngine = FaceRecognitionEngine.getInstance();
     this.cameraSync = new CameraSyncHandler({
       supabase: this.supabase,
+      getLinkedHomeId: () => this.getLinkedHomeId()
+    });
+    this.modelSync = new ModelSyncHandler({
+      supabase: this.supabase,
+      faceEngine: this.faceEngine
+    });
+    this.telemetrySync = new TelemetrySyncHandler({
+      supabase: this.supabase,
+      registry: this.registry,
       getLinkedHomeId: () => this.getLinkedHomeId()
     });
     this.initSupabaseRealtime();
@@ -59,30 +74,16 @@ export class SmarterHomeSync {
     try {
       this.supabase = createClient(config.supabaseUrl, config.supabaseKey);
       this.cameraSync.updateSupabaseClient(this.supabase);
+      this.modelSync.updateSupabaseClient(this.supabase);
+      this.telemetrySync.updateSupabaseClient(this.supabase);
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
 
-      // 1. Initial sync of family members & rooms from Supabase
-      this.syncFamilyMembersFromSupabase();
-      this.syncRoomsFromSupabase();
+      // 1. Initial sync of models & rooms from Supabase
+      this.modelSync.syncAllModelsFromSupabase().catch(() => {});
+      this.syncRoomsFromSupabase().catch(() => {});
 
-      // 2. Subscribe to Realtime family_members & rooms table changes
-      this.supabase
-        .channel('pi-family-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, (payload) => {
-          console.log('[SmarterHomeSync] Received Supabase Realtime family_members update:', payload.eventType);
-          if (payload.new && (payload.new as any).name) {
-            const member = payload.new as any;
-            if (member.photo_urls && member.photo_urls.length >= 10) {
-              this.faceEngine.trainPersonWithPhotos(member.name, member.photo_urls, member.role, member.id)
-                .catch(err => console.error('[SmarterHomeSync] Realtime training error:', err));
-            } else if (member.descriptor) {
-              this.faceEngine.enrollPerson(member.name, member.role, member.descriptor);
-            }
-          }
-        })
-        .subscribe();
-
+      // 2. Subscribe to Realtime rooms table changes
       this.supabase
         .channel('pi-rooms-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
@@ -98,7 +99,6 @@ export class SmarterHomeSync {
   public async syncRoomsFromSupabase(): Promise<void> {
     let rooms: any[] | null = null;
 
-    // 1. Primary: Fetch rooms from the smarter-home central server API
     if (config.smarterHomeApiUrl && config.smarterHomeToken) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
@@ -120,7 +120,6 @@ export class SmarterHomeSync {
       }
     }
 
-    // 2. Direct Supabase fallback
     if (!rooms && this.supabase) {
       try {
         const homeId = await this.getLinkedHomeId();
@@ -172,7 +171,6 @@ export class SmarterHomeSync {
               }, false);
             }
           } else {
-            // Camera disabled for this room: unregister if exists
             const existing = this.registry.getSensor(camSensorId);
             if (existing) {
               await this.registry.unregisterSensor(camSensorId, false);
@@ -180,7 +178,6 @@ export class SmarterHomeSync {
           }
         }
 
-        // Clean up legacy sensor-cam-1 if dynamic rooms exist
         if (this.registry.getSensor('sensor-cam-1')) {
           await this.registry.unregisterSensor('sensor-cam-1', false);
         }
@@ -190,37 +187,13 @@ export class SmarterHomeSync {
     }
   }
 
-  private async syncFamilyMembersFromSupabase(): Promise<void> {
-    if (!this.supabase) return;
-    try {
-      const { data, error } = await this.supabase
-        .from('family_members')
-        .select('*');
-
-      if (!error && data && data.length > 0) {
-        console.log(`[SmarterHomeSync] Synced ${data.length} family member(s) from Supabase Realtime DB`);
-        for (const member of data) {
-          if (member.photo_urls && member.photo_urls.length >= 10) {
-            await this.faceEngine.trainPersonWithPhotos(member.name, member.photo_urls, member.role, member.id).catch(() => {});
-          } else if (member.descriptor) {
-            this.faceEngine.enrollPerson(member.name, member.role, member.descriptor);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[SmarterHomeSync] Failed to fetch initial family members from Supabase:', (err as Error).message);
-    }
-  }
-
   private setupListeners(): void {
-    // Immediate push when face detection status changes
     this.registry.on('face_detection', async (event: { sensorId: string; sensorName: string } & FaceDetectionPayload) => {
       if (event.detected) {
-        await this.sendFaceAlertToSmarterHome(event);
+        await this.telemetrySync.sendFaceAlertToSmarterHome(event);
       }
     });
 
-    // Listen directly to any active camera sensor for per-frame streaming & first-frame arrival events
     const bindCamera = (sensor: any) => {
       if (sensor && sensor.type === 'camera') {
         const roomId = sensor.config?.options?.roomId || sensor.config?.options?.room_id;
@@ -238,10 +211,7 @@ export class SmarterHomeSync {
     this.registry.on('sensor_registered', bindCamera);
   }
 
-  private cachedRooms: any[] = [];
-
   public async getRooms(): Promise<any[]> {
-    // 1. Primary: Fetch from Smarter Home server API endpoint
     if (config.smarterHomeApiUrl && config.smarterHomeToken) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
@@ -264,7 +234,6 @@ export class SmarterHomeSync {
       }
     }
 
-    // 2. Direct Supabase fallback
     if (this.supabase) {
       try {
         const homeId = await this.getLinkedHomeId();
@@ -295,7 +264,6 @@ export class SmarterHomeSync {
         return this.cachedHomeId;
       }
 
-      // Fallback: check if the token itself is a valid home_id in the homes table
       const { data: homeData } = await this.supabase
         .from('homes')
         .select('id')
@@ -321,18 +289,24 @@ export class SmarterHomeSync {
     return this.cameraSync.sendFirstFrameArrival(arrival, sensorId, sensorName);
   }
 
-  private cameraStreamTimer: NodeJS.Timeout | null = null;
-
   private startSyncLoop(): void {
     if (this.syncTimer) clearInterval(this.syncTimer);
     if (this.cameraStreamTimer) clearInterval(this.cameraStreamTimer);
 
-    // 1. General telemetry sync loop (temperature, pin status, humidity)
     this.syncTimer = setInterval(async () => {
-      await this.syncTelemetry();
+      const success = await this.telemetrySync.syncTelemetry();
+      const isoNow = new Date().toISOString();
+      this.status.totalSyncs++;
+      this.status.lastSyncTime = isoNow;
+      this.status.lastSyncSuccess = success;
+      if (success) {
+        this.status.lastError = null;
+      } else {
+        this.status.failedSyncs++;
+        this.status.lastError = 'Unable to reach Supabase Realtime or HTTP Gateway';
+      }
     }, config.syncIntervalMs);
 
-    // 2. Continuous multi-camera frame stream loop (~3.3 FPS)
     this.cameraStreamTimer = setInterval(async () => {
       const cameraSensors = this.registry.getAllSensors().filter(s => s.type === 'camera') as any[];
       for (const cam of cameraSensors) {
@@ -347,185 +321,12 @@ export class SmarterHomeSync {
     }, 300);
   }
 
-  /**
-   * Push current live sensor readings to smarter-home and Supabase
-   */
   public async syncTelemetry(): Promise<boolean> {
-    const readings = this.registry.getLatestReadings();
-    const sensorList = Object.values(readings);
-
-    const tempReading = sensorList.find(r => r.sensorType === 'temperature') as TemperatureReading | undefined;
-    const camSensor = this.registry.getAllSensors().find(s => s.type === 'camera');
-    const faceState: FaceDetectionPayload | null = camSensor && 'getFaceDetection' in camSensor 
-      ? (camSensor as any).getFaceDetection() 
-      : null;
-
-    const isoNow = new Date().toISOString();
-    const payload = {
-      source: 'raspberry-pi-controller',
-      timestamp: isoNow,
-      sensors: readings,
-      telemetry: {
-        temperature: tempReading?.temperatureC ?? null,
-        humidity: tempReading?.humidityPct ?? null,
-        faceDetection: faceState ? {
-          detected: faceState.detected,
-          status: faceState.status,
-          person: faceState.person,
-          confidence: faceState.confidence,
-          timestamp: faceState.timestamp
-        } : null
-      }
-    };
-
-    let supabaseSynced = false;
-
-    if (this.supabase) {
-      try {
-        const homeId = await this.getLinkedHomeId();
-        
-        if (tempReading?.temperatureC !== undefined) {
-          const telemetryVal = {
-            temperature: tempReading.temperatureC,
-            humidity: tempReading.humidityPct,
-            faceDetection: payload.telemetry.faceDetection,
-            updatedAt: isoNow
-          };
-
-          if (homeId) {
-            await this.supabase.from('home_states').upsert({
-              home_id: homeId,
-              key: 'pi_telemetry',
-              value: telemetryVal,
-              updated_at: isoNow
-            }, { onConflict: 'home_id,key' });
-          } else {
-            await this.supabase.from('home_states').upsert({
-              key: 'pi_telemetry',
-              value: telemetryVal,
-              updated_at: isoNow
-            }, { onConflict: 'user_id,key' });
-          }
-        }
-
-        if (homeId) {
-          this.supabase
-            .channel(`home-telemetry-${homeId}`)
-            .send({
-              type: 'broadcast',
-              event: 'telemetry_update',
-              payload
-            })
-            .catch(() => {});
-        }
-
-        supabaseSynced = true;
-      } catch {}
-    }
-
-    let httpSynced = false;
-    if (config.smarterHomeApiUrl) {
-      try {
-        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
-        const response = await fetch(targetUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-pi-token': config.smarterHomeToken,
-            'x-pi-api-key': config.smarterHomeApiKey
-          },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(2500)
-        });
-
-        if (response.ok) {
-          httpSynced = true;
-        }
-      } catch {}
-    }
-
-    const success = supabaseSynced || httpSynced;
-    this.status.totalSyncs++;
-    this.status.lastSyncTime = isoNow;
-    this.status.lastSyncSuccess = success;
-    if (success) {
-      this.status.lastError = null;
-    } else {
-      this.status.failedSyncs++;
-      this.status.lastError = 'Unable to reach Supabase Realtime or HTTP Gateway';
-    }
-
-    return success;
+    return this.telemetrySync.syncTelemetry();
   }
 
-  /**
-   * Immediate Face Event Dispatch
-   */
   public async sendFaceAlertToSmarterHome(event: { sensorId: string; sensorName: string } & FaceDetectionPayload): Promise<boolean> {
-    const isoNow = new Date().toISOString();
-    const payload = {
-      source: 'raspberry-pi-camera',
-      type: 'face_recognition_event',
-      sensorId: event.sensorId,
-      sensorName: event.sensorName,
-      data: {
-        detected: event.detected,
-        status: event.status,
-        person: event.person,
-        confidence: event.confidence,
-        timestamp: event.timestamp || isoNow
-      }
-    };
-
-    let supabaseHandled = false;
-
-    if (this.supabase) {
-      try {
-        if (event.status === 'recognized' && event.person) {
-          await this.supabase
-            .from('family_members')
-            .update({
-              status: 'Home',
-              last_seen: 'Just now',
-              via: 'Entrance Camera',
-              updated_at: isoNow
-            })
-            .ilike('name', event.person);
-        }
-
-        const homeId = await this.getLinkedHomeId();
-        if (homeId) {
-          this.supabase
-            .channel(`home-security-${homeId}`)
-            .send({
-              type: 'broadcast',
-              event: 'face_alert',
-              payload
-            })
-            .catch(() => {});
-        }
-
-        supabaseHandled = true;
-      } catch {}
-    }
-
-    if (config.smarterHomeApiUrl) {
-      try {
-        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
-        await fetch(targetUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-pi-token': config.smarterHomeToken,
-            'x-pi-api-key': config.smarterHomeApiKey
-          },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(2500)
-        });
-      } catch {}
-    }
-
-    return supabaseHandled;
+    return this.telemetrySync.sendFaceAlertToSmarterHome(event);
   }
 
   public getStatus(): SyncStatus {
