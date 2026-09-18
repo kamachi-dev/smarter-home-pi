@@ -94,8 +94,11 @@ export class SmarterHomeSync {
       // 2. Subscribe to Realtime rooms table changes
       this.supabase
         .channel('pi-rooms-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, (payload) => {
           console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras & relay switches...');
+          if (payload.new) {
+            this.lightingSync.handleRoomRecordUpdate(payload.new);
+          }
           this.syncRoomsFromSupabase().catch(() => {});
         })
         .subscribe();

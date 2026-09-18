@@ -1,8 +1,5 @@
-feat(relay): add 12V relay module actuator and real-time room GPIO lighting sync
+feat(realtime): add instant direct payload dispatch for Supabase Realtime light toggles
 
-- Created `RelaySensor` (`src/sensors/relay/index.ts`) supporting active-low relay logic and virtual hardware simulation
-- Implemented `LightingSyncHandler` (`src/sync/lightingSyncHandler.ts`) to dynamically bind and synchronize room lights to GPIO pins
-- Integrated `LightingSyncHandler` in `SmarterHomeSync` subscribing to Supabase Realtime `rooms`, `home_states`, and `lighting_states`
-- Added default `sensor-relay-17` for Living Room light switch on Pin 11 (BCM GPIO 17) in `SensorRegistry`
-- Added `/api/relay/toggle` and `/api/relay/state` endpoints in `src/server/routes/api.ts`
-- Verified 100% type safety and clean compilation with `tsc`
+- Connected `handleRoomRecordUpdate` directly to the `postgres_changes` payload on the `rooms` table for zero-latency relay actuation
+- Subscribed to `home_states` (`key = 'lights'`) and `lighting_states` in Realtime channel
+- Verified clean build and typecheck with `tsc`

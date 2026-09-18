@@ -87,6 +87,30 @@ export class LightingSyncHandler {
   }
 
   /**
+   * Directly handle Realtime UPDATE/INSERT from the `rooms` table
+   * allowing instantaneous relay switching when user toggles lights on the Rooms page.
+   */
+  public handleRoomRecordUpdate(room: any): void {
+    if (!room) return;
+    const bcmGpio = room.light_gpio !== null && room.light_gpio !== undefined && room.light_gpio !== ''
+      ? parseInt(String(room.light_gpio), 10)
+      : null;
+
+    if (bcmGpio !== null && !isNaN(bcmGpio)) {
+      const relay = this.getRelayByGpio(bcmGpio);
+      if (relay && typeof room.lights_power === 'boolean') {
+        relay.setPower(room.lights_power);
+        return;
+      }
+    }
+
+    // Fallback match by roomId or name
+    if (typeof room.lights_power === 'boolean') {
+      this.setRoomLightPower(room.id || room.name, room.lights_power);
+    }
+  }
+
+  /**
    * Handle changes from home_states (e.g. key = 'lights')
    * or direct rooms table updates.
    */
