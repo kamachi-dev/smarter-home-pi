@@ -4,6 +4,7 @@ import { FaceRecognitionEngine } from '../../sensors/camera/faceRecognition.js';
 import { SmarterHomeSync } from '../../sync/smarterHomeSync.js';
 import { GpioManager } from '../../hardware/gpio.js';
 import { RelaySensor } from '../../sensors/relay/index.js';
+import { lightLogger } from '../../sensors/relay/logger.js';
 import { SensorConfig, SensorType } from '../../types/index.js';
 import { config, saveHubConfig } from '../../config/env.js';
 
@@ -244,7 +245,7 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
 
     const nextPower = power !== undefined ? Boolean(power) : !targetRelay.getPower();
-    targetRelay.setPower(nextPower);
+    targetRelay.setPower(nextPower, 'local_api');
 
     return {
       success: true,
@@ -266,6 +267,13 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
       gpio: bcm,
       power: targetRelay ? targetRelay.getPower() : false,
       found: Boolean(targetRelay)
+    };
+  });
+
+  // Relay Light Switch: Get activity logs
+  server.get('/api/relay/logs', async () => {
+    return {
+      logs: lightLogger.getLogs()
     };
   });
 

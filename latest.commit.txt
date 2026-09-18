@@ -1,5 +1,7 @@
-feat(realtime): add instant direct payload dispatch for Supabase Realtime light toggles
+feat(logging): add dedicated light switch activity logger and terminal log output
 
-- Connected `handleRoomRecordUpdate` directly to the `postgres_changes` payload on the `rooms` table for zero-latency relay actuation
-- Subscribed to `home_states` (`key = 'lights'`) and `lighting_states` in Realtime channel
-- Verified clean build and typecheck with `tsc`
+- Implemented `lightLogger` (`src/sensors/relay/logger.ts`) with circular memory buffer (last 100 entries)
+- Formatted high-visibility colored terminal logs with timestamp, room name, GPIO pin, ON/OFF state, and trigger source
+- Connected `RelaySensor.setPower` to record logs across `realtime_supabase` and `local_api` sources
+- Exposed `/api/relay/logs` endpoint in Fastify server for live dashboard and log consumption
+- Verified clean build and type safety with `tsc`

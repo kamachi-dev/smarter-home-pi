@@ -99,14 +99,14 @@ export class LightingSyncHandler {
     if (bcmGpio !== null && !isNaN(bcmGpio)) {
       const relay = this.getRelayByGpio(bcmGpio);
       if (relay && typeof room.lights_power === 'boolean') {
-        relay.setPower(room.lights_power);
+        relay.setPower(room.lights_power, 'realtime_supabase');
         return;
       }
     }
 
     // Fallback match by roomId or name
     if (typeof room.lights_power === 'boolean') {
-      this.setRoomLightPower(room.id || room.name, room.lights_power);
+      this.setRoomLightPower(room.id || room.name, room.lights_power, 'realtime_supabase');
     }
   }
 
@@ -120,7 +120,7 @@ export class LightingSyncHandler {
       for (const [roomKey, lightObj] of Object.entries(value)) {
         const power = (lightObj as any)?.power;
         if (typeof power === 'boolean') {
-          this.setRoomLightPower(roomKey, power);
+          this.setRoomLightPower(roomKey, power, 'realtime_supabase');
         }
       }
     }
@@ -130,7 +130,11 @@ export class LightingSyncHandler {
    * Turn a specific room's light relay ON or OFF.
    * Matches room by ID, room name, or key (e.g. 'livingRoom').
    */
-  public setRoomLightPower(roomIdentifier: string, power: boolean): boolean {
+  public setRoomLightPower(
+    roomIdentifier: string,
+    power: boolean,
+    source: 'realtime_supabase' | 'local_api' | 'manual' = 'realtime_supabase'
+  ): boolean {
     const normalized = roomIdentifier.toLowerCase().replace(/[\s_-]/g, '');
     let found = false;
 
@@ -145,7 +149,7 @@ export class LightingSyncHandler {
           sensorRoomName.includes(normalized) ||
           (normalized === 'livingroom' && sensor.bcmGpio === 17) // Fallback default
         ) {
-          sensor.setPower(power);
+          sensor.setPower(power, source);
           found = true;
         }
       }

@@ -1,6 +1,7 @@
 import { BaseSensor } from '../base.js';
 import { SensorConfig, RelayReading } from '../../types/index.js';
 import { GpioManager } from '../../hardware/gpio.js';
+import { lightLogger } from './logger.js';
 
 export class RelaySensor extends BaseSensor {
   private gpioManager: GpioManager;
@@ -30,10 +31,13 @@ export class RelaySensor extends BaseSensor {
     this.gpioManager.writePin(this.bcm, rawVal as 0 | 1);
   }
 
-  public setPower(power: boolean): void {
+  public setPower(power: boolean, source: 'realtime_supabase' | 'local_api' | 'manual' = 'realtime_supabase'): void {
     if (this.power === power) return;
     this.power = power;
     this.applyHardwareState();
+
+    const roomLabel = this.config.options?.roomName || this.config.options?.roomId || this.name;
+    lightLogger.record(roomLabel, this.bcm, this.power ? 'ON' : 'OFF', source);
 
     const reading: RelayReading = {
       sensorId: this.id,
@@ -48,7 +52,6 @@ export class RelaySensor extends BaseSensor {
 
     this.lastReading = reading;
     this.emit('reading', reading);
-    console.log(`[RelaySensor] Light Switch "${this.name}" (GPIO ${this.bcm}) => ${this.power ? 'ON' : 'OFF'}`);
   }
 
   public getPower(): boolean {
