@@ -1,7 +1,5 @@
-feat(logging): add dedicated light switch activity logger and terminal log output
+﻿feat(temperature): add Adafruit DHT22 hardware driver and per-room temperature sync
 
-- Implemented `lightLogger` (`src/sensors/relay/logger.ts`) with circular memory buffer (last 100 entries)
-- Formatted high-visibility colored terminal logs with timestamp, room name, GPIO pin, ON/OFF state, and trigger source
-- Connected `RelaySensor.setPower` to record logs across `realtime_supabase` and `local_api` sources
-- Exposed `/api/relay/logs` endpoint in Fastify server for live dashboard and log consumption
-- Verified clean build and type safety with `tsc`
+- Implement Adafruit CircuitPython DHT22 reader fallback via python3 in TemperatureSensor
+- Create modular TemperatureSyncHandler (<500 lines) to dynamically register and manage per-room temperature sensors
+- Integrate TemperatureSyncHandler into SmarterHomeSync loop to continuously push live temperature & humidity readings to Supabase rooms table

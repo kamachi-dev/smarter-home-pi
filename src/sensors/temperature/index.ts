@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import { BaseSensor } from '../base.js';
 import { SensorConfig, TemperatureReading } from '../../types/index.js';
 import { GpioManager } from '../../hardware/gpio.js';
@@ -32,6 +33,34 @@ export class TemperatureSensor extends BaseSensor {
       // @ts-ignore
       this.dhtDriver = require('node-dht-sensor');
     } catch {}
+  }
+
+  /**
+   * Reads Adafruit CircuitPython DHT sensor via python3 (standard on modern RPi OS)
+   */
+  private readAdafruitDht(bcmGpio: number): { tempC: number; humidity: number } | null {
+    if (process.platform !== 'linux') return null;
+    try {
+      const sensorClass = this.model === 'DHT11' ? 'DHT11' : 'DHT22';
+      const pythonScript = `import board, adafruit_dht; d=adafruit_dht.${sensorClass}(getattr(board, f'D{${bcmGpio}}')); print(f'{d.temperature:.1f},{d.humidity:.1f}')`;
+      const result = spawnSync('python3', ['-c', pythonScript], {
+        encoding: 'utf8',
+        timeout: 4000
+      });
+
+      if (result.status === 0 && result.stdout) {
+        const line = result.stdout.trim().split('\n')[0].trim();
+        const parts = line.split(',');
+        if (parts.length >= 2) {
+          const t = parseFloat(parts[0]);
+          const h = parseFloat(parts[1]);
+          if (!isNaN(t) && !isNaN(h)) {
+            return { tempC: t, humidity: h };
+          }
+        }
+      }
+    } catch {}
+    return null;
   }
 
   public async init(): Promise<void> {
@@ -82,21 +111,31 @@ export class TemperatureSensor extends BaseSensor {
       }
     }
 
-    // 2. Native DHT11 / DHT22 Sensor Read (node-dht-sensor on Raspberry Pi)
+    // 2. Native DHT11 / DHT22 Sensor Read (Adafruit CircuitPython or node-dht-sensor on Raspberry Pi)
     if ((this.model === 'DHT11' || this.model === 'DHT22') && this.config.bcmGpio !== undefined) {
-      const hasGpiomem = fs.existsSync('/dev/gpiomem');
-      if (this.dhtDriver && hasGpiomem) {
-        try {
-          const sensorType = this.model === 'DHT11' ? 11 : 22;
-          const res = this.dhtDriver.read(sensorType, this.config.bcmGpio);
-          if (res && res.temperature !== undefined && res.humidity !== undefined) {
-            tempC = Math.round(res.temperature * 10) / 10;
-            humidity = Math.round(res.humidity * 10) / 10;
-          }
-        } catch {}
+      // 2a. First try Adafruit CircuitPython (board.D<pin> + adafruit_dht)
+      const adafruitReading = this.readAdafruitDht(this.config.bcmGpio);
+      if (adafruitReading) {
+        tempC = adafruitReading.tempC;
+        humidity = adafruitReading.humidity;
       }
 
-      // Read pin status via GpioManager
+      // 2b. Fallback to node-dht-sensor if available
+      if (tempC === null) {
+        const hasGpiomem = fs.existsSync('/dev/gpiomem');
+        if (this.dhtDriver && hasGpiomem) {
+          try {
+            const sensorType = this.model === 'DHT11' ? 11 : 22;
+            const res = this.dhtDriver.read(sensorType, this.config.bcmGpio);
+            if (res && res.temperature !== undefined && res.humidity !== undefined) {
+              tempC = Math.round(res.temperature * 10) / 10;
+              humidity = Math.round(res.humidity * 10) / 10;
+            }
+          } catch {}
+        }
+      }
+
+      // 2c. Read pin status via GpioManager fallback
       if (tempC === null) {
         const pinState = this.gpioManager.readPin(this.config.bcmGpio);
         if (pinState === 0 || pinState === 1) {

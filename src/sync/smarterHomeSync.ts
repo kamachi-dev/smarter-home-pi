@@ -6,6 +6,7 @@ import { CameraSyncHandler } from './cameraSyncHandler.js';
 import { ModelSyncHandler } from './modelSyncHandler.js';
 import { TelemetrySyncHandler } from './telemetrySyncHandler.js';
 import { LightingSyncHandler } from './lightingSyncHandler.js';
+import { TemperatureSyncHandler } from './temperatureSyncHandler.js';
 import { config } from '../config/env.js';
 
 export interface SyncStatus {
@@ -30,6 +31,7 @@ export class SmarterHomeSync {
   private modelSync: ModelSyncHandler;
   private telemetrySync: TelemetrySyncHandler;
   private lightingSync: LightingSyncHandler;
+  private temperatureSync: TemperatureSyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -60,6 +62,11 @@ export class SmarterHomeSync {
       registry: this.registry,
       getLinkedHomeId: () => this.getLinkedHomeId()
     });
+    this.temperatureSync = new TemperatureSyncHandler({
+      supabase: this.supabase,
+      registry: this.registry,
+      getLinkedHomeId: () => this.getLinkedHomeId()
+    });
     this.initSupabaseRealtime();
     this.setupListeners();
     this.startSyncLoop();
@@ -84,6 +91,7 @@ export class SmarterHomeSync {
       this.modelSync.updateSupabaseClient(this.supabase);
       this.telemetrySync.updateSupabaseClient(this.supabase);
       this.lightingSync.updateSupabaseClient(this.supabase);
+      this.temperatureSync.updateSupabaseClient(this.supabase);
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
 
@@ -212,8 +220,11 @@ export class SmarterHomeSync {
 
         // Sync room light switch GPIO pin assignments and relays
         await this.lightingSync.syncRoomsLighting(rooms);
+
+        // Sync room temperature sensor GPIO pin assignments (e.g. DHT22 on GPIO 4)
+        await this.temperatureSync.syncRoomsTemperature(rooms);
       } catch (err) {
-        console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting from Supabase:', (err as Error).message);
+        console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting/temperature from Supabase:', (err as Error).message);
       }
     }
   }
@@ -326,6 +337,9 @@ export class SmarterHomeSync {
 
     this.syncTimer = setInterval(async () => {
       const success = await this.telemetrySync.syncTelemetry();
+      if (this.cachedRooms.length > 0) {
+        await this.temperatureSync.syncReadingsToRooms(this.cachedRooms).catch(() => {});
+      }
       const isoNow = new Date().toISOString();
       this.status.totalSyncs++;
       this.status.lastSyncTime = isoNow;
