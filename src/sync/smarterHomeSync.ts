@@ -5,6 +5,7 @@ import { SensorReading, FaceDetectionPayload } from '../types/index.js';
 import { CameraSyncHandler } from './cameraSyncHandler.js';
 import { ModelSyncHandler } from './modelSyncHandler.js';
 import { TelemetrySyncHandler } from './telemetrySyncHandler.js';
+import { LightingSyncHandler } from './lightingSyncHandler.js';
 import { config } from '../config/env.js';
 
 export interface SyncStatus {
@@ -28,6 +29,7 @@ export class SmarterHomeSync {
   private cameraSync: CameraSyncHandler;
   private modelSync: ModelSyncHandler;
   private telemetrySync: TelemetrySyncHandler;
+  private lightingSync: LightingSyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -49,6 +51,11 @@ export class SmarterHomeSync {
       faceEngine: this.faceEngine
     });
     this.telemetrySync = new TelemetrySyncHandler({
+      supabase: this.supabase,
+      registry: this.registry,
+      getLinkedHomeId: () => this.getLinkedHomeId()
+    });
+    this.lightingSync = new LightingSyncHandler({
       supabase: this.supabase,
       registry: this.registry,
       getLinkedHomeId: () => this.getLinkedHomeId()
@@ -76,6 +83,7 @@ export class SmarterHomeSync {
       this.cameraSync.updateSupabaseClient(this.supabase);
       this.modelSync.updateSupabaseClient(this.supabase);
       this.telemetrySync.updateSupabaseClient(this.supabase);
+      this.lightingSync.updateSupabaseClient(this.supabase);
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
 
@@ -87,8 +95,25 @@ export class SmarterHomeSync {
       this.supabase
         .channel('pi-rooms-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
-          console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras...');
+          console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras & relay switches...');
           this.syncRoomsFromSupabase().catch(() => {});
+        })
+        .subscribe();
+
+      // 3. Subscribe to Realtime lighting toggles (home_states: key='lights' and lighting_states)
+      this.supabase
+        .channel('pi-lighting-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'home_states' }, (payload) => {
+          const record = payload.new as any;
+          if (record && record.key === 'lights') {
+            this.lightingSync.handleStateUpdate(record.key, record.value);
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'lighting_states' }, (payload) => {
+          const record = payload.new as any;
+          if (record && record.key === 'lights') {
+            this.lightingSync.handleStateUpdate(record.key, record.value);
+          }
         })
         .subscribe();
     } catch (err) {
@@ -181,8 +206,11 @@ export class SmarterHomeSync {
         if (this.registry.getSensor('sensor-cam-1')) {
           await this.registry.unregisterSensor('sensor-cam-1', false);
         }
+
+        // Sync room light switch GPIO pin assignments and relays
+        await this.lightingSync.syncRoomsLighting(rooms);
       } catch (err) {
-        console.warn('[SmarterHomeSync] Failed to sync rooms cameras from Supabase:', (err as Error).message);
+        console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting from Supabase:', (err as Error).message);
       }
     }
   }

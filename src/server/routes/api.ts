@@ -3,6 +3,7 @@ import { SensorRegistry } from '../../sensors/registry.js';
 import { FaceRecognitionEngine } from '../../sensors/camera/faceRecognition.js';
 import { SmarterHomeSync } from '../../sync/smarterHomeSync.js';
 import { GpioManager } from '../../hardware/gpio.js';
+import { RelaySensor } from '../../sensors/relay/index.js';
 import { SensorConfig, SensorType } from '../../types/index.js';
 import { config, saveHubConfig } from '../../config/env.js';
 
@@ -214,6 +215,59 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
   });
 
+  // Relay Light Switch: Toggle or set state
+  server.post<{
+    Body: {
+      gpio?: number;
+      sensorId?: string;
+      power?: boolean;
+    };
+  }>('/api/relay/toggle', async (request, reply) => {
+    const { gpio, sensorId, power } = request.body || {};
+    let targetRelay: RelaySensor | undefined;
+
+    if (sensorId) {
+      targetRelay = registry.getSensor(sensorId) as RelaySensor;
+    } else if (gpio !== undefined) {
+      targetRelay = registry.getAllSensors().find(
+        s => s.type === 'relay' && s.bcmGpio === gpio
+      ) as RelaySensor;
+    } else {
+      // Default to primary relay (GPIO 17)
+      targetRelay = registry.getAllSensors().find(
+        s => s.type === 'relay' && (s.bcmGpio === 17 || s.id === 'sensor-relay-17')
+      ) as RelaySensor;
+    }
+
+    if (!targetRelay) {
+      return reply.code(404).send({ error: 'Relay light switch not found for specified pin or ID.' });
+    }
+
+    const nextPower = power !== undefined ? Boolean(power) : !targetRelay.getPower();
+    targetRelay.setPower(nextPower);
+
+    return {
+      success: true,
+      sensorId: targetRelay.id,
+      gpio: targetRelay.bcmGpio,
+      power: targetRelay.getPower()
+    };
+  });
+
+  // Relay Light Switch: Get current state
+  server.get<{ Querystring: { gpio?: string } }>('/api/relay/state', async (request) => {
+    const { gpio } = request.query || {};
+    const bcm = gpio ? parseInt(gpio, 10) : 17;
+    const targetRelay = registry.getAllSensors().find(
+      s => s.type === 'relay' && (s.bcmGpio === bcm || (bcm === 17 && s.id === 'sensor-relay-17'))
+    ) as RelaySensor | undefined;
+
+    return {
+      gpio: bcm,
+      power: targetRelay ? targetRelay.getPower() : false,
+      found: Boolean(targetRelay)
+    };
+  });
 
   // Face Recognition: Enrolled Profiles
   server.get('/api/faces', async () => {

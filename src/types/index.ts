@@ -69,7 +69,15 @@ export interface CameraReading extends BaseReading {
   snapshotBase64?: string;
 }
 
-export type SensorReading = TemperatureReading | CameraReading | (BaseReading & Record<string, any>);
+export interface RelayReading extends BaseReading {
+  sensorType: 'relay';
+  power: boolean;
+  bcmGpio: number;
+  activeLow: boolean;
+  roomId?: string;
+}
+
+export type SensorReading = TemperatureReading | CameraReading | RelayReading | (BaseReading & Record<string, any>);
 
 export interface EnrolledPerson {
   id: string;

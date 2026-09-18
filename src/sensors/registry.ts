@@ -3,6 +3,7 @@ import fs from 'fs';
 import { BaseSensor } from './base.js';
 import { TemperatureSensor } from './temperature/index.js';
 import { CameraSensor } from './camera/index.js';
+import { RelaySensor } from './relay/index.js';
 import { SensorConfig, SensorReading, SensorType, RPiPin } from '../types/index.js';
 import { RPI_40_PIN_HEADER, getPinByNumber } from '../hardware/pinout.js';
 import { config } from '../config/env.js';
@@ -61,6 +62,20 @@ export class SensorRegistry extends EventEmitter {
             pollIntervalMs: 2500,
             enabled: true,
             options: { model: 'DHT22' }
+          },
+          {
+            id: 'sensor-relay-17',
+            name: 'Living Room 12V LED Relay Switch',
+            type: 'relay',
+            pinNumber: 11,
+            bcmGpio: 17,
+            pollIntervalMs: 0,
+            enabled: true,
+            options: {
+              activeLow: true,
+              roomId: 'livingRoom',
+              initialPower: false
+            }
           }
         ];
         for (const cfg of defaultConfigs) {
@@ -112,6 +127,9 @@ export class SensorRegistry extends EventEmitter {
         break;
       case 'camera':
         sensorInstance = new CameraSensor(cfg);
+        break;
+      case 'relay':
+        sensorInstance = new RelaySensor(cfg);
         break;
       default:
         throw new Error(`Unsupported sensor type: ${cfg.type}`);
