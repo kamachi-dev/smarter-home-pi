@@ -1,5 +1,5 @@
-﻿feat(temperature): add Adafruit DHT22 hardware driver and per-room temperature sync
+feat(sync): add AcSyncHandler for per-room AC relay control via Supabase realtime
 
-- Implement Adafruit CircuitPython DHT22 reader fallback via python3 in TemperatureSensor
-- Create modular TemperatureSyncHandler (<500 lines) to dynamically register and manage per-room temperature sensors
-- Integrate TemperatureSyncHandler into SmarterHomeSync loop to continuously push live temperature & humidity readings to Supabase rooms table
+- Implement modular AcSyncHandler (<500 lines) to dynamically register and index RelaySensor for room ac_gpio pins.
+- Integrate AcSyncHandler into SmarterHomeSync to handle realtime updates on the rooms table and switch AC power relays instantaneously.
+- Wire initial room AC relay synchronization into syncRoomsFromSupabase.

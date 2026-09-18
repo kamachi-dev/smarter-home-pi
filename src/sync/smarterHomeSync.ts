@@ -7,6 +7,7 @@ import { ModelSyncHandler } from './modelSyncHandler.js';
 import { TelemetrySyncHandler } from './telemetrySyncHandler.js';
 import { LightingSyncHandler } from './lightingSyncHandler.js';
 import { TemperatureSyncHandler } from './temperatureSyncHandler.js';
+import { AcSyncHandler } from './acSyncHandler.js';
 import { config } from '../config/env.js';
 
 export interface SyncStatus {
@@ -32,6 +33,7 @@ export class SmarterHomeSync {
   private telemetrySync: TelemetrySyncHandler;
   private lightingSync: LightingSyncHandler;
   private temperatureSync: TemperatureSyncHandler;
+  private acSync: AcSyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -67,6 +69,11 @@ export class SmarterHomeSync {
       registry: this.registry,
       getLinkedHomeId: () => this.getLinkedHomeId()
     });
+    this.acSync = new AcSyncHandler({
+      supabase: this.supabase,
+      registry: this.registry,
+      getLinkedHomeId: () => this.getLinkedHomeId()
+    });
     this.initSupabaseRealtime();
     this.setupListeners();
     this.startSyncLoop();
@@ -92,6 +99,7 @@ export class SmarterHomeSync {
       this.telemetrySync.updateSupabaseClient(this.supabase);
       this.lightingSync.updateSupabaseClient(this.supabase);
       this.temperatureSync.updateSupabaseClient(this.supabase);
+      this.acSync.updateSupabaseClient(this.supabase);
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
 
@@ -103,9 +111,10 @@ export class SmarterHomeSync {
       this.supabase
         .channel('pi-rooms-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, (payload) => {
-          console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras & relay switches...');
+          console.log('[SmarterHomeSync] Received Supabase Realtime rooms update, refreshing room cameras, lights & AC relays...');
           if (payload.new) {
             this.lightingSync.handleRoomRecordUpdate(payload.new);
+            this.acSync.handleRoomRecordUpdate(payload.new);
           }
           this.syncRoomsFromSupabase().catch(() => {});
         })
@@ -221,10 +230,13 @@ export class SmarterHomeSync {
         // Sync room light switch GPIO pin assignments and relays
         await this.lightingSync.syncRoomsLighting(rooms);
 
+        // Sync room AC relay GPIO pin assignments and relays
+        await this.acSync.syncRoomsAc(rooms);
+
         // Sync room temperature sensor GPIO pin assignments (e.g. DHT22 on GPIO 4)
         await this.temperatureSync.syncRoomsTemperature(rooms);
       } catch (err) {
-        console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting/temperature from Supabase:', (err as Error).message);
+        console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting/ac/temperature from Supabase:', (err as Error).message);
       }
     }
   }
