@@ -8,6 +8,7 @@ import { TelemetrySyncHandler } from './telemetrySyncHandler.js';
 import { LightingSyncHandler } from './lightingSyncHandler.js';
 import { TemperatureSyncHandler } from './temperatureSyncHandler.js';
 import { AcSyncHandler } from './acSyncHandler.js';
+import { SensorSyncHandler } from './sensorSyncHandler.js';
 import { config } from '../config/env.js';
 
 export interface SyncStatus {
@@ -34,6 +35,7 @@ export class SmarterHomeSync {
   private lightingSync: LightingSyncHandler;
   private temperatureSync: TemperatureSyncHandler;
   private acSync: AcSyncHandler;
+  private sensorSync: SensorSyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -74,9 +76,22 @@ export class SmarterHomeSync {
       registry: this.registry,
       getLinkedHomeId: () => this.getLinkedHomeId()
     });
+    this.sensorSync = new SensorSyncHandler({
+      supabase: this.supabase,
+      registry: this.registry,
+      getLinkedHomeId: () => this.getLinkedHomeId()
+    });
     this.initSupabaseRealtime();
     this.setupListeners();
     this.startSyncLoop();
+  }
+
+  public getSensorSync(): SensorSyncHandler {
+    return this.sensorSync;
+  }
+
+  public getModelSync(): ModelSyncHandler {
+    return this.modelSync;
   }
 
   public static getInstance(): SmarterHomeSync {
@@ -100,8 +115,27 @@ export class SmarterHomeSync {
       this.lightingSync.updateSupabaseClient(this.supabase);
       this.temperatureSync.updateSupabaseClient(this.supabase);
       this.acSync.updateSupabaseClient(this.supabase);
+      this.sensorSync.updateSupabaseClient(this.supabase);
       this.status.supabaseConnected = true;
       console.log('[SmarterHomeSync] Supabase Realtime connected successfully');
+
+      // Authenticate if user credentials are provided (enables full RLS authorized CRUD)
+      if (config.supabaseUserEmail && config.supabaseUserPassword) {
+        try {
+          const { error: authErr } = await this.supabase.auth.signInWithPassword({
+            email: config.supabaseUserEmail,
+            password: config.supabaseUserPassword
+          });
+          if (authErr) {
+            console.warn('[SmarterHomeSync] Supabase user authentication warning:', authErr.message);
+          } else {
+            console.log(`[SmarterHomeSync] Authenticated as ${config.supabaseUserEmail} (RLS CRUD authorized)`);
+            this.modelSync.setupRealtimeListeners();
+          }
+        } catch (authEx) {
+          console.warn('[SmarterHomeSync] Auth exception:', (authEx as Error).message);
+        }
+      }
 
       // 1. Initial sync of models & rooms from Supabase
       this.modelSync.syncAllModelsFromSupabase().catch(() => {});
@@ -144,7 +178,25 @@ export class SmarterHomeSync {
   public async syncRoomsFromSupabase(): Promise<void> {
     let rooms: any[] | null = null;
 
-    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
+    // 1. Direct Supabase query (primary source of truth)
+    if (this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        let query = this.supabase.from('rooms').select('*');
+        if (homeId) {
+          query = query.eq('home_id', homeId);
+        }
+        const { data: dbRooms, error } = await query;
+        if (!error && dbRooms && Array.isArray(dbRooms) && dbRooms.length > 0) {
+          rooms = dbRooms;
+        }
+      } catch (err) {
+        console.warn('[SmarterHomeSync] Direct Supabase rooms query error:', (err as Error).message);
+      }
+    }
+
+    // 2. Secondary fallback only if direct Supabase returned no rooms and non-vercel endpoint
+    if (!rooms && config.smarterHomeApiUrl && config.smarterHomeToken && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
         const res = await fetch(targetUrl, {
@@ -152,7 +204,7 @@ export class SmarterHomeSync {
             'x-pi-token': config.smarterHomeToken,
             'x-pi-api-key': config.smarterHomeApiKey
           },
-          signal: AbortSignal.timeout(4000)
+          signal: AbortSignal.timeout(2000)
         });
         if (res.ok) {
           const data = (await res.json()) as any;
@@ -165,41 +217,43 @@ export class SmarterHomeSync {
       }
     }
 
-    if (!rooms && this.supabase) {
-      try {
-        const homeId = await this.getLinkedHomeId();
-        if (homeId) {
-          const { data: dbRooms, error } = await this.supabase
-            .from('rooms')
-            .select('*')
-            .eq('home_id', homeId);
-          if (!error && dbRooms && Array.isArray(dbRooms)) {
-            rooms = dbRooms;
-          }
-        }
-      } catch {}
-    }
-
     if (rooms && Array.isArray(rooms)) {
       try {
-        this.cachedRooms = rooms;
-        for (const room of rooms) {
+        const mappedRooms = rooms.map(room => {
+          const isRpi = room.camera_ip === 'rpi-camera' || room.camera_type === 'rpi' || (room.camera_stream_url && room.camera_stream_url.startsWith('rpicam'));
+          const isTapo = !isRpi && (room.camera_enabled || Boolean(room.camera_ip));
+          return {
+            ...room,
+            camera_type: isRpi ? 'rpi' : (isTapo ? 'tapo' : 'none')
+          };
+        });
+        this.cachedRooms = mappedRooms;
+        this.registry.emit('rooms_updated', mappedRooms);
+        for (const room of mappedRooms) {
           const camSensorId = `sensor-cam-${room.id}`;
-          if (room.camera_enabled && room.camera_ip) {
-            const hasAuth = Boolean(room.camera_username && room.camera_password);
-            const authPrefix = hasAuth
-              ? `${encodeURIComponent(room.camera_username)}:${encodeURIComponent(room.camera_password)}@`
-              : (room.camera_username ? `${encodeURIComponent(room.camera_username)}@` : '');
-            const realStreamUrl = `rtsp://${authPrefix}${room.camera_ip}:554/stream1`;
+          const isRpi = room.camera_type === 'rpi';
+          if (room.camera_enabled && (isRpi || room.camera_ip)) {
+            let realStreamUrl: string;
+            let cameraType: 'rpi' | 'tapo';
+            if (isRpi) {
+              realStreamUrl = 'rpicam://0';
+              cameraType = 'rpi';
+            } else {
+              const hasAuth = Boolean(room.camera_username && room.camera_password);
+              const authPrefix = hasAuth
+                ? `${encodeURIComponent(room.camera_username)}:${encodeURIComponent(room.camera_password)}@`
+                : (room.camera_username ? `${encodeURIComponent(room.camera_username)}@` : '');
+              realStreamUrl = room.camera_stream_url || `rtsp://${authPrefix}${room.camera_ip}:554/stream1`;
+              cameraType = 'tapo';
+            }
 
             const existing = this.registry.getSensor(camSensorId);
             const needsUpdate = !existing || 
               existing.config.options?.streamUrl !== realStreamUrl || 
-              existing.config.options?.ip !== room.camera_ip;
+              existing.config.options?.cameraType !== cameraType;
 
             if (needsUpdate) {
-              const displayUrl = `rtsp://${room.camera_username ? `${room.camera_username}:***@` : ''}${room.camera_ip}:554/stream1`;
-              console.log(`[SmarterHomeSync] 📹 Initializing RTSP stream for room "${room.name}" (${room.camera_ip}) -> [${displayUrl}]`);
+              console.log(`[SmarterHomeSync] 📹 Initializing ${cameraType.toUpperCase()} camera for "${room.name}" -> [${realStreamUrl}]`);
               await this.registry.registerSensor({
                 id: camSensorId,
                 name: `${room.name} Camera`,
@@ -208,6 +262,7 @@ export class SmarterHomeSync {
                 enabled: true,
                 options: {
                   roomId: room.id,
+                  cameraType,
                   ip: room.camera_ip,
                   user: room.camera_username,
                   password: room.camera_password,
@@ -235,6 +290,9 @@ export class SmarterHomeSync {
 
         // Sync room temperature sensor GPIO pin assignments (e.g. DHT22 on GPIO 4)
         await this.temperatureSync.syncRoomsTemperature(rooms);
+
+        // Sync all hardware sensors & GPIO pin mapping via SensorSyncHandler
+        await this.sensorSync.syncSensorsFromSupabase();
       } catch (err) {
         console.warn('[SmarterHomeSync] Failed to sync rooms cameras/lighting/ac/temperature from Supabase:', (err as Error).message);
       }
@@ -266,7 +324,35 @@ export class SmarterHomeSync {
   }
 
   public async getRooms(): Promise<any[]> {
-    if (config.smarterHomeApiUrl && config.smarterHomeToken) {
+    if (this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        let query = this.supabase.from('rooms').select('*');
+        if (homeId) {
+          query = query.eq('home_id', homeId);
+        }
+        const { data, error } = await query;
+        if (!error && data && Array.isArray(data) && data.length > 0) {
+          this.cachedRooms = data.map(room => {
+            const isRpi = room.camera_ip === 'rpi-camera' || room.camera_type === 'rpi' || (room.camera_stream_url && room.camera_stream_url.startsWith('rpicam'));
+            const isTapo = !isRpi && (room.camera_enabled || Boolean(room.camera_ip));
+            return {
+              ...room,
+              camera_type: isRpi ? 'rpi' : (isTapo ? 'tapo' : 'none')
+            };
+          });
+          return this.cachedRooms;
+        }
+      } catch (err) {
+        console.warn('[SmarterHomeSync] Failed to query Supabase rooms:', (err as Error).message);
+      }
+    }
+
+    if (this.cachedRooms && this.cachedRooms.length > 0) {
+      return this.cachedRooms;
+    }
+
+    if (config.smarterHomeApiUrl && config.smarterHomeToken && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
         const res = await fetch(targetUrl, {
@@ -274,7 +360,7 @@ export class SmarterHomeSync {
             'x-pi-token': config.smarterHomeToken,
             'x-pi-api-key': config.smarterHomeApiKey
           },
-          signal: AbortSignal.timeout(4000)
+          signal: AbortSignal.timeout(2000)
         });
         if (res.ok) {
           const data = (await res.json()) as any;
@@ -288,19 +374,10 @@ export class SmarterHomeSync {
       }
     }
 
-    if (this.supabase) {
-      try {
-        const homeId = await this.getLinkedHomeId();
-        if (homeId) {
-          const { data } = await this.supabase.from('rooms').select('*').eq('home_id', homeId);
-          if (data && Array.isArray(data) && data.length > 0) {
-            this.cachedRooms = data;
-            return this.cachedRooms;
-          }
-        }
-      } catch {}
-    }
+    return this.cachedRooms;
+  }
 
+  public getCachedRooms(): any[] {
     return this.cachedRooms;
   }
 
@@ -352,6 +429,7 @@ export class SmarterHomeSync {
       if (this.cachedRooms.length > 0) {
         await this.temperatureSync.syncReadingsToRooms(this.cachedRooms).catch(() => {});
       }
+      this.modelSync.syncAllModelsFromSupabase().catch(() => {});
       const isoNow = new Date().toISOString();
       this.status.totalSyncs++;
       this.status.lastSyncTime = isoNow;

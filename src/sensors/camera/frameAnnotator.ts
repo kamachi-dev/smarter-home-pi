@@ -65,6 +65,9 @@ export class FrameAnnotator {
     detection?: FaceDetectionPayload | null,
     quality: number = 50
   ): Buffer {
+    if (!detection || !detection.detected) {
+      return imageBuffer;
+    }
     try {
       const decoded = jpeg.decode(imageBuffer, { useTArray: true, maxMemoryUsageInMB: 512 });
       const { width, height, data } = decoded;
@@ -107,8 +110,8 @@ export class FrameAnnotator {
   ): void {
     const isRecognized = face.status === 'recognized';
     const primaryColor: [number, number, number, number] = isRecognized
-      ? [16, 185, 129, 255]  // Emerald Green (#10b981)
-      : [245, 158, 11, 255]; // Amber Orange (#f59e0b)
+      ? [16, 185, 129, 255]  // Vibrant Green (#10b981)
+      : [249, 115, 22, 255]; // Vibrant Orange (#f97316)
 
     const bx = Math.max(2, Math.min(imgWidth - 10, Math.round(face.box.x)));
     const by = Math.max(2, Math.min(imgHeight - 10, Math.round(face.box.y)));
@@ -170,7 +173,7 @@ export class FrameAnnotator {
       : 'AI SURVEILLANCE: MONITORING';
 
     const statusColor: [number, number, number, number] = isDetected
-      ? (isRec ? [16, 185, 129, 255] : [245, 158, 11, 255])
+      ? (isRec ? [16, 185, 129, 255] : [249, 115, 22, 255])
       : [120, 113, 108, 255];
 
     // Top status pill

@@ -178,20 +178,21 @@ export class ModelSyncHandler {
   }
 
   /**
-   * Initial sync of all models registered in Supabase
+   * Synchronizes all neural face models registered in Supabase family_members and storage
    */
-  public async syncAllModelsFromSupabase(): Promise<void> {
-    if (!this.supabase) return;
+  public async syncAllModelsFromSupabase(): Promise<{ count: number; syncedMembers: string[] }> {
+    const result = { count: 0, syncedMembers: [] as string[] };
+    if (!this.supabase) return result;
     try {
       const { data: members, error } = await this.supabase
         .from('family_members')
         .select('*');
 
       if (!error && members && members.length > 0) {
-        console.log(`[ModelSyncHandler] 🔍 Performing initial model sync for ${members.length} family member(s)...`);
         for (const member of members) {
+          let applied = false;
           if (member.model_url) {
-            await this.downloadAndApplyModelFromUrl(member.model_url, member);
+            applied = await this.downloadAndApplyModelFromUrl(member.model_url, member);
           } else if (member.descriptor && Array.isArray(member.descriptor) && member.descriptor.length === 128) {
             this.faceEngine.applyModelDescriptor({
               id: member.id,
@@ -202,11 +203,17 @@ export class ModelSyncHandler {
               photoCount: member.photo_count || member.photo_urls?.length,
               imageUrl: member.photo_urls?.[0]
             });
+            applied = true;
+          }
+          if (applied) {
+            result.count++;
+            result.syncedMembers.push(member.name);
           }
         }
       }
     } catch (err) {
       console.warn('[ModelSyncHandler] Failed to sync models from Supabase:', (err as Error).message);
     }
+    return result;
   }
 }

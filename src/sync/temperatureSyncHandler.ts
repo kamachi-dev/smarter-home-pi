@@ -100,10 +100,10 @@ export class TemperatureSyncHandler {
       if (!sensor) continue;
 
       const latest = sensor.getLastReading() as TemperatureReading | null;
-      if (!latest || latest.temperatureC === undefined) continue;
+      if (!latest || latest.temperatureC === undefined || latest.temperatureC === null) continue;
 
       const tempVal = Math.round(latest.temperatureC * 10) / 10;
-      const humVal = latest.humidityPct !== undefined ? Math.round(latest.humidityPct) : null;
+      const humVal = (latest.humidityPct !== undefined && latest.humidityPct !== null) ? Math.round(latest.humidityPct) : null;
 
       const lastSent = this.lastSyncedReadings.get(room.id);
       const hasChanged = !lastSent ||

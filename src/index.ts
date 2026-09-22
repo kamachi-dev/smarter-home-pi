@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { config } from './config/env.js';
 import { apiRoutes } from './server/routes/api.js';
+import { roomRoutes } from './server/routes/rooms.js';
 import { wsRoutes } from './server/routes/ws.js';
 import { dashboardHtml } from './server/dashboard.js';
 import { SensorRegistry } from './sensors/registry.js';
@@ -26,6 +27,7 @@ async function bootstrap() {
 
   // Register routes
   await app.register(apiRoutes);
+  await app.register(roomRoutes);
   await app.register(wsRoutes);
 
   // Serve minimal dashboard

@@ -110,56 +110,67 @@ export const cameraScript = `
           ctx.fillRect(0, y, canvas.width, 1.5);
         }
 
-        // Active Face Recognition Bounding Box & HUD
+        // Active Face Recognition Bounding Box & HUD (Green for Recognized, Orange for Unknown)
         const det = state.currentFaceDetection;
         if (det && det.detected) {
-          const isRec = det.status === 'recognized';
-          const boxColor = isRec ? '#10b981' : '#f59e0b';
-          const boxBg = isRec ? 'rgba(16, 185, 129, 0.16)' : 'rgba(245, 158, 11, 0.16)';
-
           const sway = (isWebcamActive || isStreamLoaded) ? 0 : Math.sin(t) * 6;
-          const bx = det.box ? det.box.x : (canvas.width / 2 - 90 + sway);
-          const by = det.box ? det.box.y : 120;
-          const bw = det.box ? det.box.width : 180;
-          const bh = det.box ? det.box.height : 220;
+          const faces = (det.faces && det.faces.length > 0) ? det.faces : [{
+            box: det.box || { x: (canvas.width / 2 - 90 + sway), y: 120, width: 180, height: 220 },
+            status: det.status,
+            person: det.person,
+            confidence: det.confidence
+          }];
 
-          // Box Fill & Border
-          ctx.fillStyle = boxBg;
-          ctx.fillRect(bx, by, bw, bh);
-          ctx.strokeStyle = boxColor;
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(bx, by, bw, bh);
+          for (const face of faces) {
+            const isRec = face.status === 'recognized';
+            const boxColor = isRec ? '#10b981' : '#f97316';
+            const boxBg = isRec ? 'rgba(16, 185, 129, 0.18)' : 'rgba(249, 115, 22, 0.18)';
 
-          // Corner Reticles
-          const cl = 20;
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(bx, by + cl); ctx.lineTo(bx, by); ctx.lineTo(bx + cl, by);
-          ctx.moveTo(bx + bw - cl, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cl);
-          ctx.moveTo(bx, by + bh - cl); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cl, by + bh);
-          ctx.moveTo(bx + bw - cl, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cl);
-          ctx.stroke();
+            const bx = Math.round(face.box ? face.box.x : (canvas.width / 2 - 90 + sway));
+            const by = Math.round(face.box ? face.box.y : 120);
+            const bw = Math.round(face.box ? face.box.width : 180);
+            const bh = Math.round(face.box ? face.box.height : 220);
 
-          // Face landmark points
-          ctx.fillStyle = boxColor;
-          const cx = bx + bw / 2;
-          const cy = by + bh / 2 - 15;
-          ctx.fillRect(cx - 30, cy - 15, 5, 5);
-          ctx.fillRect(cx + 25, cy - 15, 5, 5);
-          ctx.fillRect(cx - 2, cy + 8, 5, 8);
-          ctx.fillRect(cx - 20, cy + 32, 40, 3);
+            // Box Fill & Border
+            ctx.fillStyle = boxBg;
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeStyle = boxColor;
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(bx, by, bw, bh);
 
-          // Name Tag & Accuracy Badge
-          const label = isRec ? ((det.person || 'Recognized') + ' (' + Math.round((det.confidence || 0.94) * 100) + '%)') : 'UNKNOWN PERSON [ALERT]';
-          ctx.font = 'bold 12px "JetBrains Mono", monospace';
-          const textMetrics = ctx.measureText(label);
-          const tagW = textMetrics.width + 16;
-          const tagH = 24;
+            // Corner Reticles
+            const cl = Math.min(20, Math.floor(Math.min(bw, bh) / 3));
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(bx, by + cl); ctx.lineTo(bx, by); ctx.lineTo(bx + cl, by);
+            ctx.moveTo(bx + bw - cl, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cl);
+            ctx.moveTo(bx, by + bh - cl); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cl, by + bh);
+            ctx.moveTo(bx + bw - cl, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cl);
+            ctx.stroke();
 
-          ctx.fillStyle = boxColor;
-          ctx.fillRect(bx, by - tagH - 4, tagW, tagH);
-          ctx.fillStyle = '#000000';
-          ctx.fillText(label, bx + 8, by - 8);
+            // Face landmark points
+            ctx.fillStyle = boxColor;
+            const cx = bx + bw / 2;
+            const cy = by + bh / 2 - 15;
+            ctx.fillRect(cx - 30, cy - 15, 5, 5);
+            ctx.fillRect(cx + 25, cy - 15, 5, 5);
+            ctx.fillRect(cx - 2, cy + 8, 5, 8);
+            ctx.fillRect(cx - 20, cy + 32, 40, 3);
+
+            // Name Tag & Accuracy Badge
+            const label = isRec
+              ? ((face.person || 'Recognized') + ' (' + Math.round((face.confidence || 0.94) * 100) + '%)')
+              : 'UNKNOWN PERSON [ALERT]';
+            ctx.font = 'bold 12px "JetBrains Mono", monospace';
+            const textMetrics = ctx.measureText(label);
+            const tagW = textMetrics.width + 16;
+            const tagH = 24;
+
+            ctx.fillStyle = boxColor;
+            ctx.fillRect(bx, by - tagH - 4, tagW, tagH);
+            ctx.fillStyle = '#000000';
+            ctx.fillText(label, bx + 8, by - 8);
+          }
         }
 
         animationFrameId = requestAnimationFrame(render);

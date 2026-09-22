@@ -20,6 +20,17 @@ export const modalScript = `
         pinSelect.appendChild(opt);
       });
 
+      const roomSelect = document.getElementById('modal-sensor-room');
+      if (roomSelect) {
+        roomSelect.innerHTML = '<option value="">-- Standalone Sensor (No Room) --</option>';
+        (state.rooms || []).forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.id;
+          opt.textContent = r.name;
+          roomSelect.appendChild(opt);
+        });
+      }
+
       document.getElementById('sensor-modal').classList.remove('hidden');
       document.getElementById('sensor-modal').classList.add('flex');
     }
@@ -44,13 +55,33 @@ export const modalScript = `
       const name = document.getElementById('modal-sensor-name').value;
       const type = document.getElementById('modal-sensor-type').value;
       const pinNumber = type === 'camera' ? undefined : parseInt(document.getElementById('modal-sensor-pin').value, 10);
+      const roomId = document.getElementById('modal-sensor-room') ? document.getElementById('modal-sensor-room').value : '';
       const pollIntervalMs = parseInt(document.getElementById('modal-poll-interval').value, 10);
 
       try {
+        const pin = state.pins.find(p => p.pinNumber === pinNumber);
+        const bcmGpio = pin ? pin.bcmGpio : undefined;
+
+        // If attached to a Supabase Room, save directly into Supabase rooms table
+        if (roomId && bcmGpio !== undefined && bcmGpio !== null) {
+          const prop = type === 'temperature' ? 'temp_gpio' : (type === 'relay' && name.toLowerCase().includes('ac')) ? 'ac_gpio' : 'light_gpio';
+          await fetch('/api/pins/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roomId, property: prop, bcmGpio })
+          });
+        }
+
         const res = await fetch('/api/sensors', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, type, pinNumber, pollIntervalMs })
+          body: JSON.stringify({
+            name,
+            type,
+            pinNumber,
+            pollIntervalMs,
+            options: roomId ? { roomId, source: 'supabase' } : {}
+          })
         });
         if (!res.ok) {
           const err = await res.json();
@@ -63,6 +94,141 @@ export const modalScript = `
         alert('Failed: ' + err.message);
       }
     }
+
+    function openRoomGpioModal(roomId, targetFocus) {
+      const modal = document.getElementById('room-gpio-modal');
+      if (!modal) return;
+
+      const roomSelect = document.getElementById('room-gpio-room-select');
+      roomSelect.innerHTML = '';
+      (state.rooms || []).forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = r.name;
+        if (r.id === roomId) opt.selected = true;
+        roomSelect.appendChild(opt);
+      });
+
+      const activeRoomId = roomId || (state.rooms && state.rooms[0] ? state.rooms[0].id : '');
+      document.getElementById('room-gpio-room-id').value = activeRoomId;
+
+      populateRoomGpioDropdowns(activeRoomId);
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      if (targetFocus === 'temp') {
+        const el = document.getElementById('room-gpio-temp-select');
+        if (el) el.focus();
+      } else if (targetFocus === 'light') {
+        const el = document.getElementById('room-gpio-light-select');
+        if (el) el.focus();
+      }
+    }
+
+    function populateRoomGpioDropdowns(roomId) {
+      const room = (state.rooms || []).find(r => r.id === roomId);
+      const subtitle = document.getElementById('room-gpio-subtitle');
+      if (subtitle && room) {
+        subtitle.textContent = 'Hardware GPIO assignments for ' + room.name + ' in Supabase';
+      }
+
+      const gpioPins = (state.pins || []).filter(p => p.capabilities && p.capabilities.includes('GPIO'));
+
+      function buildOptions(currentGpio) {
+        let html = '<option value="">-- Disconnected / No Sensor --</option>';
+        gpioPins.forEach(p => {
+          const isSelected = currentGpio !== null && currentGpio !== undefined && currentGpio !== '' && parseInt(currentGpio) === p.bcmGpio;
+          let assignedLabel = '';
+          if (p.assignedSensor) {
+            const isThisRoom = p.assignedSensor.roomId === roomId;
+            assignedLabel = isThisRoom ? ' [Current ' + (p.assignedSensor.type || '') + ']' : ' [Assigned: ' + (p.assignedSensor.roomName || p.assignedSensor.name) + ']';
+          }
+          html += '<option value="' + p.bcmGpio + '" ' + (isSelected ? 'selected' : '') + '>' +
+            'GPIO ' + p.bcmGpio + ' (Physical Pin ' + p.pinNumber + ')' + assignedLabel +
+          '</option>';
+        });
+        return html;
+      }
+
+      const lightSel = document.getElementById('room-gpio-light-select');
+      const tempSel = document.getElementById('room-gpio-temp-select');
+      const acSel = document.getElementById('room-gpio-ac-select');
+
+      if (lightSel) lightSel.innerHTML = buildOptions(room ? room.light_gpio : null);
+      if (tempSel) tempSel.innerHTML = buildOptions(room ? room.temp_gpio : null);
+      if (acSel) acSel.innerHTML = buildOptions(room ? room.ac_gpio : null);
+    }
+
+    function handleRoomSelectChange() {
+      const roomSelect = document.getElementById('room-gpio-room-select');
+      const roomId = roomSelect.value;
+      document.getElementById('room-gpio-room-id').value = roomId;
+      populateRoomGpioDropdowns(roomId);
+    }
+
+    function closeRoomGpioModal() {
+      const modal = document.getElementById('room-gpio-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    async function handleSaveRoomGpio(e) {
+      e.preventDefault();
+      const roomId = document.getElementById('room-gpio-room-id').value;
+      if (!roomId) {
+        alert('Please select a room.');
+        return;
+      }
+
+      const lightVal = document.getElementById('room-gpio-light-select').value;
+      const tempVal = document.getElementById('room-gpio-temp-select').value;
+      const acVal = document.getElementById('room-gpio-ac-select').value;
+
+      const light_gpio = lightVal !== '' ? parseInt(lightVal, 10) : null;
+      const temp_gpio = tempVal !== '' ? parseInt(tempVal, 10) : null;
+      const ac_gpio = acVal !== '' ? parseInt(acVal, 10) : null;
+
+      const saveBtn = document.getElementById('room-gpio-save-btn');
+      if (saveBtn) {
+        saveBtn.textContent = 'Saving to Supabase...';
+        saveBtn.disabled = true;
+      }
+
+      try {
+        const res = await fetch('/api/rooms/' + roomId + '/sensors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ light_gpio, temp_gpio, ac_gpio })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Failed to update room GPIOs: ' + (err.error || 'Server error'));
+          return;
+        }
+
+        const data = await res.json();
+        if (data.rooms) state.rooms = data.rooms;
+        closeRoomGpioModal();
+        await fetchRooms();
+        if (typeof fetchPins === 'function') await fetchPins();
+      } catch (err) {
+        alert('Failed: ' + err.message);
+      } finally {
+        if (saveBtn) {
+          saveBtn.textContent = 'Save & Sync to Supabase';
+          saveBtn.disabled = false;
+        }
+      }
+    }
+
+    window.openRoomGpioModal = openRoomGpioModal;
+    window.closeRoomGpioModal = closeRoomGpioModal;
+    window.handleRoomSelectChange = handleRoomSelectChange;
+    window.handleSaveRoomGpio = handleSaveRoomGpio;
 
     function openEnrollFaceModal() {
       state.selectedTrainingPhotos = [];

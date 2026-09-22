@@ -4,8 +4,8 @@ import { BaseSensor } from './base.js';
 import { TemperatureSensor } from './temperature/index.js';
 import { CameraSensor } from './camera/index.js';
 import { RelaySensor } from './relay/index.js';
-import { SensorConfig, SensorReading, SensorType, RPiPin } from '../types/index.js';
-import { RPI_40_PIN_HEADER, getPinByNumber } from '../hardware/pinout.js';
+import { SensorConfig, SensorReading, SensorType, RPiPin, AssignedSensorSummary } from '../types/index.js';
+import { RPI_40_PIN_HEADER, getPinByNumber, getPinByBcmGpio } from '../hardware/pinout.js';
 import { config } from '../config/env.js';
 
 export class SensorRegistry extends EventEmitter {
@@ -42,8 +42,8 @@ export class SensorRegistry extends EventEmitter {
           this.registerSensor(cfg, false);
         }
       } else {
-        // Initial default configuration: Temperature on Pin 7 (GPIO 4) and Camera (CSI/USB)
-        console.log('[SensorRegistry] Initializing default hardware sensors (Camera + Temperature)');
+        // Initial default configuration: Only default camera (sensors will be synchronized from Supabase)
+        console.log('[SensorRegistry] Initializing default camera device (sensors will be synchronized from Supabase)');
         const defaultConfigs: SensorConfig[] = [
           {
             id: 'sensor-cam-1',
@@ -52,30 +52,6 @@ export class SensorRegistry extends EventEmitter {
             pollIntervalMs: 2000,
             enabled: true,
             options: { resolution: '640x480' }
-          },
-          {
-            id: 'sensor-temp-1',
-            name: 'Living Room Temperature & Humidity',
-            type: 'temperature',
-            pinNumber: 7,
-            bcmGpio: 4,
-            pollIntervalMs: 2500,
-            enabled: true,
-            options: { model: 'DHT22' }
-          },
-          {
-            id: 'sensor-relay-17',
-            name: 'Living Room 12V LED Relay Switch',
-            type: 'relay',
-            pinNumber: 11,
-            bcmGpio: 17,
-            pollIntervalMs: 0,
-            enabled: true,
-            options: {
-              activeLow: true,
-              roomId: 'livingRoom',
-              initialPower: false
-            }
           }
         ];
         for (const cfg of defaultConfigs) {
@@ -104,6 +80,14 @@ export class SensorRegistry extends EventEmitter {
     // If updating existing sensor, stop and remove it first
     if (this.sensors.has(cfg.id)) {
       await this.unregisterSensor(cfg.id, false);
+    }
+
+    // Resolve pinNumber from bcmGpio if pinNumber was omitted
+    if (cfg.pinNumber === undefined && cfg.bcmGpio !== undefined) {
+      const pin = getPinByBcmGpio(cfg.bcmGpio);
+      if (pin) {
+        cfg.pinNumber = pin.pinNumber;
+      }
     }
 
     // Validate Pin if specified
@@ -164,6 +148,7 @@ export class SensorRegistry extends EventEmitter {
 
     console.log(`[SensorRegistry] Registered ${cfg.type} sensor "${cfg.name}" [ID: ${cfg.id}]`);
     this.emit('sensor_registered', sensorInstance);
+    this.emit('pins_updated', this.getPinsWithAssignments());
     return sensorInstance;
   }
 
@@ -184,6 +169,8 @@ export class SensorRegistry extends EventEmitter {
     }
 
     console.log(`[SensorRegistry] Unregistered sensor [ID: ${sensorId}]`);
+    this.emit('sensor_unregistered', sensorId);
+    this.emit('pins_updated', this.getPinsWithAssignments());
     return true;
   }
 
@@ -202,9 +189,36 @@ export class SensorRegistry extends EventEmitter {
   public getPinsWithAssignments(): RPiPin[] {
     return RPI_40_PIN_HEADER.map(pin => {
       const assignedSensorId = this.pinAssignments.get(pin.pinNumber);
+      let assignedSensor: AssignedSensorSummary | undefined;
+      if (assignedSensorId) {
+        const sensor = this.sensors.get(assignedSensorId);
+        if (sensor) {
+          const cfg = sensor.config;
+          const reading = this.latestReadings.get(assignedSensorId);
+          let state: any = undefined;
+          if (sensor instanceof RelaySensor) {
+            state = { power: sensor.getPower() };
+          } else if (reading && 'temperatureC' in reading) {
+            state = { temperature: reading.temperatureC, humidity: reading.humidityPct };
+          }
+          assignedSensor = {
+            id: cfg.id,
+            name: cfg.name,
+            type: cfg.type,
+            bcmGpio: cfg.bcmGpio || pin.bcmGpio || 0,
+            pinNumber: pin.pinNumber,
+            roomName: cfg.options?.roomName,
+            roomId: cfg.options?.roomId,
+            state,
+            reading,
+            source: cfg.options?.source || 'supabase'
+          };
+        }
+      }
       return {
         ...pin,
-        assignedSensorId
+        assignedSensorId,
+        assignedSensor
       };
     });
   }

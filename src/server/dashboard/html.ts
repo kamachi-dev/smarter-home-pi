@@ -1,3 +1,5 @@
+import { getAllModalsHtml } from './modals.js';
+
 export function getDashboardHtmlTemplate(script: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -106,33 +108,65 @@ export function getDashboardHtmlTemplate(script: string): string {
     <!-- Main Bento Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-      <!-- Left: Interactive 40-Pin Header Visualizer (5 Cols) -->
-      <section class="lg:col-span-5 glass-panel p-6 rounded-2xl flex flex-col space-y-5">
-        <div class="flex justify-between items-center">
+      <!-- Left: Interactive 40-Pin Header Visualizer & Supabase Sensor Mapping (5 Cols) -->
+      <section class="lg:col-span-5 glass-panel p-6 rounded-2xl flex flex-col space-y-4">
+        <div class="flex justify-between items-start">
           <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
-              <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
-              </svg>
-              Raspberry Pi 40-Pin Header
-            </h2>
-            <p class="text-[11px] text-stone-400">Click any available GPIO pin to attach a sensor</p>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                </svg>
+                Raspberry Pi 40-Pin Header
+              </h2>
+              <div id="supabase-header-badge" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-stone-900 border border-stone-800 text-[10px] font-mono text-stone-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-stone-500"></span>
+                <span>Connecting...</span>
+              </div>
+            </div>
+            <p class="text-[11px] text-stone-400 mt-0.5">Live hardware pinout synced with Supabase sensors &amp; rooms</p>
           </div>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800/80 text-stone-400">GPIO.BCM</span>
+          <div class="flex items-center gap-1.5">
+            <button onclick="syncPinsWithSupabase()" title="Sync sensors and GPIO mappings from Supabase" class="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-stone-800/80 hover:bg-stone-700 text-stone-300 border border-stone-700/60 transition-all flex items-center gap-1.5 active:scale-95">
+              <svg id="sync-pins-btn" class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              <span>Sync Pins</span>
+            </button>
+            <span class="text-[10px] font-mono px-2 py-1 rounded bg-stone-800/80 text-stone-400 border border-stone-800">BCM</span>
+          </div>
         </div>
 
-        <!-- Legend -->
-        <div class="flex flex-wrap gap-3 text-[10px] font-semibold text-stone-400 pt-1 pb-2 border-b border-stone-800">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>5V</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>3.3V</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-stone-600"></span>GND</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>GPIO</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Assigned</span>
+        <!-- Sensor Legend -->
+        <div class="flex flex-wrap gap-2 text-[9px] font-semibold text-stone-400 pt-1 pb-2 border-b border-stone-800">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>5V</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>3.3V</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-stone-600"></span>GND</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>GPIO</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Light</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-400"></span>Temp</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-400"></span>AC</span>
         </div>
 
         <!-- Pin Header Board -->
-        <div class="flex-1 bg-stone-950/80 border border-stone-850 rounded-xl p-3 max-h-[580px] overflow-y-auto font-mono text-xs">
-          <div id="pin-header-container" class="space-y-1.5">
+        <div class="bg-stone-950/80 border border-stone-850 rounded-xl p-2.5 max-h-[440px] overflow-y-auto font-mono text-xs">
+          <div id="pin-header-container" class="space-y-1">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Supabase Synced Sensors & GPIO Map Breakdown -->
+        <div class="pt-3 border-t border-stone-850 space-y-2">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+              </svg>
+              Supabase Sensor &amp; GPIO Mapping
+            </h3>
+            <span id="supabase-sensor-count" class="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-900 border border-stone-800 text-amber-400 font-bold">0 Active</span>
+          </div>
+          <div id="supabase-sensors-list" class="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
             <!-- Rendered by JS -->
           </div>
         </div>
@@ -161,6 +195,7 @@ export function getDashboardHtmlTemplate(script: string): string {
             <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
               <span class="text-stone-500 text-[10px] block uppercase">Face Detected</span>
               <span id="det-detected" class="font-bold text-stone-200 text-sm mt-0.5 block">No</span>
+              <span id="det-status" class="hidden">none</span>
             </div>
             <div class="bg-stone-950/60 border border-stone-850 p-3 rounded-xl">
               <span class="text-stone-500 text-[10px] block uppercase">Identified Person</span>
@@ -183,31 +218,33 @@ export function getDashboardHtmlTemplate(script: string): string {
           <div class="glass-panel p-5 rounded-2xl space-y-2">
             <div class="flex justify-between items-center text-xs text-stone-400 font-bold uppercase tracking-wider">
               <span>Ambient Temperature</span>
-              <span class="text-amber-400">DHT22</span>
+              <span id="temp-sensor-badge" class="text-amber-400">DHT22</span>
             </div>
             <div class="flex items-baseline gap-2">
-              <span id="temp-val" class="text-4xl font-extrabold text-white font-mono">22.5</span>
+              <span id="temp-val" class="text-4xl font-extrabold text-white font-mono">--</span>
               <span class="text-lg font-bold text-stone-400">°C</span>
-              <span id="temp-val-f" class="text-sm font-mono text-stone-400 ml-auto">72.5 °F</span>
+              <span id="temp-val-f" class="text-sm font-mono text-stone-400 ml-auto">-- °F</span>
             </div>
             <div class="w-full bg-stone-900 rounded-full h-1.5 overflow-hidden mt-2">
-              <div id="temp-bar" class="bg-gradient-to-r from-sky-400 to-amber-500 h-full w-[55%]"></div>
+              <div id="temp-bar" class="bg-gradient-to-r from-sky-400 to-amber-500 h-full w-0 transition-all duration-500"></div>
             </div>
+            <p id="ambient-room-name" class="text-[10px] text-stone-400 font-mono mt-1 truncate">Checking Supabase...</p>
           </div>
 
           <div class="glass-panel p-5 rounded-2xl space-y-2">
             <div class="flex justify-between items-center text-xs text-stone-400 font-bold uppercase tracking-wider">
               <span>Relative Humidity</span>
-              <span class="text-sky-400">1-Wire</span>
+              <span id="hum-sensor-badge" class="text-sky-400">DHT22</span>
             </div>
             <div class="flex items-baseline gap-2">
-              <span id="hum-val" class="text-4xl font-extrabold text-white font-mono">50.0</span>
+              <span id="hum-val" class="text-4xl font-extrabold text-white font-mono">--</span>
               <span class="text-lg font-bold text-stone-400">%</span>
-              <span class="text-xs font-mono text-emerald-400 ml-auto font-bold">OPTIMAL</span>
+              <span id="hum-status-badge" class="text-xs font-mono text-stone-500 ml-auto font-bold">--</span>
             </div>
             <div class="w-full bg-stone-900 rounded-full h-1.5 overflow-hidden mt-2">
-              <div id="hum-bar" class="bg-gradient-to-r from-emerald-400 to-teal-500 h-full w-[50%]"></div>
+              <div id="hum-bar" class="bg-gradient-to-r from-emerald-400 to-teal-500 h-full w-0 transition-all duration-500"></div>
             </div>
+            <p id="ambient-hum-source" class="text-[10px] text-stone-400 font-mono mt-1 truncate">Checking Supabase...</p>
           </div>
 
         </div>
@@ -271,12 +308,21 @@ export function getDashboardHtmlTemplate(script: string): string {
                 <p class="text-[11px] text-stone-400">Every synchronized spatial zone and its connected camera stream</p>
               </div>
             </div>
-            <button onclick="fetchRooms()" class="px-3 py-1 text-xs font-bold rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 transition-all flex items-center gap-1.5">
-              <svg class="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-              </svg>
-              <span>Refresh Rooms</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button onclick="openCreateRoomModal()" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                <span>Add Room</span>
+              </button>
+              <button onclick="openRoomGpioModal()" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span>GPIO Pins</span>
+              </button>
+              <button onclick="fetchRooms()" class="p-1.5 text-xs font-bold rounded-xl bg-stone-850 hover:bg-stone-700 text-stone-300 transition-all flex items-center" title="Refresh Rooms">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+              </button>
+            </div>
           </div>
           <div id="rooms-camera-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <!-- Rendered by JS -->
@@ -288,125 +334,7 @@ export function getDashboardHtmlTemplate(script: string): string {
     </div>
   </div>
 
-  <!-- Add Sensor Modal -->
-  <div id="sensor-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="glass-panel bg-stone-925 p-6 rounded-2xl max-w-md w-full border border-stone-800 space-y-4">
-      <div class="flex justify-between items-center border-b border-stone-800 pb-3">
-        <h3 class="text-base font-bold text-white">Attach Sensor to GPIO</h3>
-        <button onclick="closeAddSensorModal()" class="text-stone-400 hover:text-white">&times;</button>
-      </div>
-
-      <form id="sensor-form" onsubmit="handleSaveSensor(event)" class="space-y-3.5 text-xs font-medium">
-        <div>
-          <label class="block text-stone-400 mb-1">Sensor Name</label>
-          <input id="modal-sensor-name" required type="text" placeholder="e.g. Master Bedroom Temp" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500">
-        </div>
-
-        <div>
-          <label class="block text-stone-400 mb-1">Sensor Type</label>
-          <select id="modal-sensor-type" onchange="handleTypeChange()" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500">
-            <option value="temperature">Temperature & Humidity (DHT11/DHT22/DS18B20)</option>
-            <option value="camera">Camera with Face Recognition (CSI/USB)</option>
-            <option value="motion">PIR Motion Detector</option>
-            <option value="door">Door / Window Magnetic Reed Switch</option>
-            <option value="gas">MQ2 Gas / Smoke Sensor</option>
-          </select>
-        </div>
-
-        <div id="modal-pin-group">
-          <label class="block text-stone-400 mb-1">GPIO Pin Assignment</label>
-          <select id="modal-sensor-pin" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500">
-            <!-- Populated dynamically -->
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-stone-400 mb-1">Sampling Interval (ms)</label>
-          <input id="modal-poll-interval" type="number" value="2500" min="500" step="500" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500">
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3 border-t border-stone-800">
-          <button type="button" onclick="closeAddSensorModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
-          <button type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-amber-500 hover:bg-amber-400">Save & Attach</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Enroll & Train Face Modal (10+ photos) -->
-  <div id="enroll-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="glass-panel bg-stone-925 p-6 rounded-2xl max-w-lg w-full border border-stone-800 space-y-4">
-      <div class="flex justify-between items-center border-b border-stone-800 pb-3">
-        <h3 class="text-base font-bold text-white">Train Family Member Face Model</h3>
-        <button onclick="closeEnrollFaceModal()" class="text-stone-400 hover:text-white">&times;</button>
-      </div>
-
-      <form id="enroll-form" onsubmit="handleTrainFace(event)" class="space-y-3.5 text-xs font-medium">
-        <div>
-          <label class="block text-stone-400 mb-1">Full Name</label>
-          <input id="modal-face-name" required type="text" placeholder="e.g. Angelo" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
-        </div>
-        <div>
-          <label class="block text-stone-400 mb-1">Role / Relationship</label>
-          <input id="modal-face-notes" type="text" placeholder="e.g. Homeowner / Resident" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500">
-        </div>
-
-        <div>
-          <div class="flex justify-between items-center mb-1">
-            <label class="block text-stone-400">Reference Photos (Minimum 10 Required)</label>
-            <span id="photo-count-badge" class="font-mono text-[10px] text-amber-400 font-bold">0 / 10 Selected</span>
-          </div>
-          <input id="modal-face-files" type="file" multiple accept="image/*" onchange="handlePhotoSelection(event)" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/20 file:text-emerald-400 hover:file:bg-emerald-500/30 cursor-pointer">
-          <p class="text-[10px] text-stone-500 mt-1">Upload at least 10 photos in varied lighting, angles, and expressions for highest accuracy.</p>
-        </div>
-
-        <div id="photo-preview-grid" class="grid grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-2 bg-stone-950/60 rounded-xl border border-stone-850">
-          <!-- Thumbnail previews -->
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3 border-t border-stone-800">
-          <button type="button" onclick="closeEnrollFaceModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
-          <button id="train-submit-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed">Train AI Model</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Smarter Home Permanent Token Modal -->
-  <div id="token-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="glass-panel bg-stone-925 p-6 rounded-2xl max-w-md w-full border border-stone-800 space-y-4">
-      <div class="flex justify-between items-center border-b border-stone-800 pb-3">
-        <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
-          </svg>
-          Link to Smarter Home
-        </h3>
-        <button onclick="closeTokenModal()" class="text-stone-400 hover:text-white">&times;</button>
-      </div>
-
-      <form id="token-form" onsubmit="handleSaveToken(event)" class="space-y-3.5 text-xs font-medium">
-        <div>
-          <label class="block text-stone-400 mb-1">Permanent Home Token</label>
-          <input id="modal-cloud-token" required type="text" placeholder="e.g. smp_live_abcdef123456..." class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-sky-500">
-          <p class="text-[10px] text-stone-500 mt-1">Generated from your Smarter Home Settings &gt; Raspberry Pi &amp; Camera Linking section.</p>
-        </div>
-
-        <div>
-          <label class="block text-stone-400 mb-1">Smarter Home URL</label>
-          <input id="modal-cloud-url" type="url" placeholder="http://localhost:3000" class="w-full bg-stone-950 border border-stone-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-500">
-        </div>
-
-        <div class="flex items-center justify-between pt-3 border-t border-stone-800">
-          <button type="button" onclick="handleClearToken()" class="px-3 py-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 text-xs">Unlink</button>
-          <div class="flex gap-2">
-            <button type="button" onclick="closeTokenModal()" class="px-4 py-2 rounded-xl text-stone-400 hover:text-white bg-stone-900 border border-stone-800">Cancel</button>
-            <button id="token-save-btn" type="submit" class="px-4 py-2 rounded-xl font-bold text-black bg-sky-400 hover:bg-sky-300">Save &amp; Link</button>
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
+  ${getAllModalsHtml()}
 
   <script>
     ${script}

@@ -17,7 +17,7 @@ export class FaceRecognitionEngine {
   private faceMatcher: any = null;
   private isInitialized: boolean = false;
   private initPromise: Promise<void> | null = null;
-  private matchDistanceThreshold = 0.55;
+  private matchDistanceThreshold = config.faceMatchThreshold || 0.62;
 
   private constructor() {
     this.initPromise = this.initNeuralModels();
@@ -36,15 +36,7 @@ export class FaceRecognitionEngine {
       await tf.setBackend('wasm');
       await tf.ready();
 
-      // Find models directory
-      let modelDir = config.modelsPath;
-      if (!fs.existsSync(modelDir)) {
-        const pkgModelDir = path.resolve(process.cwd(), 'node_modules/@vladmandic/face-api/model');
-        if (fs.existsSync(pkgModelDir)) {
-          modelDir = pkgModelDir;
-        }
-      }
-
+      const modelDir = fs.existsSync(config.modelsPath) ? config.modelsPath : path.resolve(process.cwd(), 'node_modules/@vladmandic/face-api/model');
       console.log(`[FaceRecognitionEngine] Loading neural face recognition models from: ${modelDir}`);
       await faceapi.nets.tinyFaceDetector.loadFromDisk(modelDir);
       await faceapi.nets.faceLandmark68TinyNet.loadFromDisk(modelDir);
@@ -59,6 +51,7 @@ export class FaceRecognitionEngine {
       console.log('[FaceRecognitionEngine] Real neural models (TinyFaceDetector + FaceLandmark68 + FaceRecognitionNet) loaded successfully!');
 
       this.loadEnrolledPeople();
+      await this.verifyEnrolledDescriptors();
       this.rebuildFaceMatcher();
     } catch (err) {
       console.error('[FaceRecognitionEngine] Failed to load neural face models:', (err as Error).message);
@@ -68,15 +61,13 @@ export class FaceRecognitionEngine {
   private loadEnrolledPeople(): void {
     try {
       if (fs.existsSync(config.enrolledFacesPath)) {
-        const raw = fs.readFileSync(config.enrolledFacesPath, 'utf8');
-        this.enrolledPeople = JSON.parse(raw);
+        this.enrolledPeople = JSON.parse(fs.readFileSync(config.enrolledFacesPath, 'utf8'));
         console.log(`[FaceRecognitionEngine] Loaded ${this.enrolledPeople.length} enrolled person profile(s) from disk`);
       } else {
         this.enrolledPeople = [];
         this.saveEnrolledPeople();
       }
-    } catch (err) {
-      console.warn('[FaceRecognitionEngine] Error loading enrolled profiles:', (err as Error).message);
+    } catch {
       this.enrolledPeople = [];
     }
   }
@@ -85,9 +76,7 @@ export class FaceRecognitionEngine {
     try {
       fs.writeFileSync(config.enrolledFacesPath, JSON.stringify(this.enrolledPeople, null, 2), 'utf8');
       this.rebuildFaceMatcher();
-    } catch (err) {
-      console.error('[FaceRecognitionEngine] Failed to save enrolled profiles:', (err as Error).message);
-    }
+    } catch {}
   }
 
   /**
@@ -122,28 +111,17 @@ export class FaceRecognitionEngine {
    */
   private bufferToTensor(input: Buffer | string): tf.Tensor3D | null {
     try {
-      let buffer: Buffer;
-      if (typeof input === 'string') {
-        const base64Data = input.replace(/^data:image\/\w+;base64,/, '');
-        buffer = Buffer.from(base64Data, 'base64');
-      } else {
-        buffer = input;
-      }
-
-      const decoded = jpeg.decode(buffer, { useTArray: true });
-      const { width, height, data } = decoded;
+      const buffer = typeof input === 'string' ? Buffer.from(input.replace(/^data:image\/\w+;base64,/, ''), 'base64') : input;
+      const { width, height, data } = jpeg.decode(buffer, { useTArray: true });
       const numPixels = width * height;
       const values = new Float32Array(numPixels * 3);
-
       for (let i = 0; i < numPixels; i++) {
-        values[i * 3 + 0] = data[i * 4 + 0];
+        values[i * 3] = data[i * 4];
         values[i * 3 + 1] = data[i * 4 + 1];
         values[i * 3 + 2] = data[i * 4 + 2];
       }
-
       return tf.tensor3d(values, [height, width, 3], 'int32');
-    } catch (err) {
-      console.warn('[FaceRecognitionEngine] Buffer to Tensor decode error:', (err as Error).message);
+    } catch {
       return null;
     }
   }
@@ -205,11 +183,8 @@ export class FaceRecognitionEngine {
       }
     }
 
-    // Normalize embedding vector
-    let sumSq = 0;
-    for (let j = 0; j < descriptorLen; j++) sumSq += composite[j] * composite[j];
-    const norm = Math.sqrt(sumSq) || 1;
-    const normalizedDescriptor = Array.from(composite).map(v => Math.round((v / norm) * 10000) / 10000);
+    // Preserve natural mean centroid embedding (raw FaceRecognitionNet scale ~1.427)
+    const normalizedDescriptor = Array.from(composite).map(v => Math.round(v * 10000) / 10000);
 
     // Compute accuracy metric based on descriptor consistency to composite centroid & detection success rate
     let totalDistance = 0;
@@ -298,40 +273,19 @@ export class FaceRecognitionEngine {
       // Multi-scale TinyFaceDetector and SsdMobilenetv1 cascade for wide-angle room cameras
       let detections: any = null;
 
-      try {
-        const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.18 });
-        detections = await faceapi.detectAllFaces(tensor, detectorOptions)
-          .withFaceLandmarks(true)
-          .withFaceDescriptors();
-      } catch {}
-
-      // Fallback 1: 512px resolution for smaller/distant faces in room cameras
-      if (!detections || detections.length === 0) {
+      for (const size of [416, 512, 320]) {
         try {
-          const hiresOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.15 });
-          detections = await faceapi.detectAllFaces(tensor, hiresOptions)
-            .withFaceLandmarks(true)
-            .withFaceDescriptors();
+          const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: size, scoreThreshold: size === 416 ? 0.18 : 0.15 });
+          detections = await faceapi.detectAllFaces(tensor, opt).withFaceLandmarks(true).withFaceDescriptors();
+          if (detections && detections.length > 0) break;
         } catch {}
       }
 
-      // Fallback 2: 320px standard resolution
-      if (!detections || detections.length === 0) {
-        try {
-          const fallbackOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 });
-          detections = await faceapi.detectAllFaces(tensor, fallbackOptions)
-            .withFaceLandmarks(true)
-            .withFaceDescriptors();
-        } catch {}
-      }
-
-      // Fallback 3: SSD MobileNet V1 if loaded
+      // Fallback: SSD MobileNet V1 if loaded
       if ((!detections || detections.length === 0) && faceapi.nets.ssdMobilenetv1?.params) {
         try {
           const ssdOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.15 });
-          detections = await faceapi.detectAllFaces(tensor, ssdOptions)
-            .withFaceLandmarks(true)
-            .withFaceDescriptors();
+          detections = await faceapi.detectAllFaces(tensor, ssdOptions).withFaceLandmarks(true).withFaceDescriptors();
         } catch {}
       }
 
@@ -364,11 +318,16 @@ export class FaceRecognitionEngine {
         let conf = Math.round(det.detection.score * 100) / 100;
 
         if (this.faceMatcher && det.descriptor) {
-          const bestMatch = this.faceMatcher.findBestMatch(det.descriptor);
-          if (bestMatch.label !== 'unknown' && bestMatch.distance <= this.matchDistanceThreshold) {
+          const match = this.faceMatcher.matchDescriptor(det.descriptor);
+          const dist = match.distance;
+          const candidate = match.label;
+          if (candidate !== 'unknown' && dist <= this.matchDistanceThreshold) {
             isMatch = true;
-            personName = bestMatch.label;
-            conf = Math.round(Math.max(0.5, 1 - bestMatch.distance) * 100) / 100;
+            personName = candidate;
+            conf = Math.round(Math.max(0.60, 1 - (dist * 0.7)) * 100) / 100;
+            console.log(`[FaceRecognitionEngine] 👤 Matched: "${personName}" (dist: ${dist.toFixed(3)} <= ${this.matchDistanceThreshold}, conf: ${conf})`);
+          } else {
+            console.log(`[FaceRecognitionEngine] ❓ Unmatched face (closest: "${candidate}", dist: ${dist.toFixed(3)} > ${this.matchDistanceThreshold})`);
           }
         }
 
@@ -422,7 +381,6 @@ export class FaceRecognitionEngine {
       enrolledAt: new Date().toISOString(),
       descriptor: descriptor || Array.from({ length: 128 }, () => 0)
     };
-
     this.enrolledPeople.push(newPerson);
     this.saveEnrolledPeople();
     return newPerson;
@@ -431,11 +389,7 @@ export class FaceRecognitionEngine {
   public updateEnrolledPerson(id: string, updates: Partial<EnrolledPerson>): EnrolledPerson | null {
     const idx = this.enrolledPeople.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    this.enrolledPeople[idx] = {
-      ...this.enrolledPeople[idx],
-      ...updates,
-      id: this.enrolledPeople[idx].id // keep original id
-    };
+    this.enrolledPeople[idx] = { ...this.enrolledPeople[idx], ...updates, id };
     this.saveEnrolledPeople();
     return this.enrolledPeople[idx];
   }
@@ -484,11 +438,59 @@ export class FaceRecognitionEngine {
     }
 
     this.saveEnrolledPeople();
+    const norm = modelData.descriptor ? Math.sqrt(modelData.descriptor.reduce((s, v) => s + v * v, 0)) : 0;
+    if ((norm < 0.9 || norm > 2.0) && modelData.imageUrl) {
+      this.extractDescriptorFromImage(modelData.imageUrl).then(realDesc => {
+        if (realDesc) {
+          personProfile.descriptor = realDesc;
+          this.saveEnrolledPeople();
+        }
+      }).catch(() => {});
+    }
     console.log(`[FaceRecognitionEngine] 🧠 Applied updated model descriptor for "${modelData.name}" and swapped into active FaceMatcher!`);
     return personProfile;
   }
 
+  public async extractDescriptorFromImage(input: Buffer | string): Promise<number[] | null> {
+    const tensor = this.bufferToTensor(input);
+    if (!tensor) return null;
+    try {
+      const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.12 });
+      const det = await faceapi.detectSingleFace(tensor, opt).withFaceLandmarks(true).withFaceDescriptor();
+      return det?.descriptor ? Array.from(det.descriptor) : null;
+    } catch {
+      return null;
+    } finally {
+      tensor.dispose();
+    }
+  }
+
+  private async verifyEnrolledDescriptors(): Promise<void> {
+    let updated = false;
+    for (const p of this.enrolledPeople) {
+      const norm = p.descriptor ? Math.sqrt(p.descriptor.reduce((s, v) => s + v * v, 0)) : 0;
+      if ((norm < 0.9 || norm > 2.0) && p.imageUrl) {
+        const realDesc = await this.extractDescriptorFromImage(p.imageUrl);
+        if (realDesc) {
+          p.descriptor = realDesc;
+          updated = true;
+          console.log(`[FaceRecognitionEngine] 🧬 Verified and upgraded real 128D embedding for "${p.name}"`);
+        }
+      }
+    }
+    if (updated) this.saveEnrolledPeople();
+  }
+
   public getEnrolledPeople(): EnrolledPerson[] {
     return [...this.enrolledPeople];
+  }
+
+  public getMatcherThreshold(): number {
+    return this.matchDistanceThreshold;
+  }
+
+  public setMatcherThreshold(threshold: number): void {
+    this.matchDistanceThreshold = threshold;
+    this.rebuildFaceMatcher();
   }
 }

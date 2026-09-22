@@ -98,7 +98,7 @@ export class TelemetrySyncHandler {
     }
 
     let httpSynced = false;
-    if (config.smarterHomeApiUrl) {
+    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
         const response = await fetch(targetUrl, {
@@ -169,7 +169,7 @@ export class TelemetrySyncHandler {
       } catch {}
     }
 
-    if (config.smarterHomeApiUrl) {
+    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
         await fetch(targetUrl, {

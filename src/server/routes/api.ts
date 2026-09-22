@@ -2,10 +2,12 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { SensorRegistry } from '../../sensors/registry.js';
 import { FaceRecognitionEngine } from '../../sensors/camera/faceRecognition.js';
 import { SmarterHomeSync } from '../../sync/smarterHomeSync.js';
+import { StandbyFrameGenerator } from '../../sensors/camera/standbyGenerator.js';
 import { GpioManager } from '../../hardware/gpio.js';
 import { RelaySensor } from '../../sensors/relay/index.js';
 import { lightLogger } from '../../sensors/relay/logger.js';
 import { SensorConfig, SensorType } from '../../types/index.js';
+import { getPinByBcmGpio } from '../../hardware/pinout.js';
 import { config, saveHubConfig } from '../../config/env.js';
 
 export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
@@ -28,22 +30,25 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     };
   });
 
-  // Get all rooms and attached camera streams from Supabase or Smarter Home Cloud
-  server.get('/api/rooms', async (request, reply) => {
-    try {
-      await syncGateway.syncRoomsFromSupabase();
-      const rooms = await syncGateway.getRooms();
-      return { rooms };
-    } catch (err) {
-      return reply.code(500).send({ error: (err as Error).message });
-    }
-  });
-
-  // Get Raspberry Pi 40-pin header with live assignments
+  // Get Raspberry Pi 40-pin header with live assignments and Supabase sensor mapping
   server.get('/api/pins', async () => {
-    return {
-      pins: registry.getPinsWithAssignments()
-    };
+    try {
+      const sensorSync = syncGateway.getSensorSync();
+      const result = await sensorSync.syncSensorsFromSupabase();
+      return {
+        pins: result.pins,
+        supabaseSensors: result.supabaseSensors,
+        supabaseConnected: result.supabaseConnected,
+        lastSyncTime: result.lastSyncTime
+      };
+    } catch (err) {
+      return {
+        pins: registry.getPinsWithAssignments(),
+        supabaseSensors: syncGateway.getSensorSync().getSupabaseSensors(),
+        supabaseConnected: false,
+        error: (err as Error).message
+      };
+    }
   });
 
   // Live Camera MJPEG Video Stream (Supports multi-room ?room=roomId parameter)
@@ -71,7 +76,7 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
       'Pragma': 'no-cache'
     });
 
-    const currentFrame = camSensor.getLatestFrame();
+    const currentFrame = camSensor.getLatestFrame() || StandbyFrameGenerator.generateFrame(640, 480).frameData;
     if (currentFrame) {
       try {
         reply.raw.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${currentFrame.length}\r\n\r\n`);
@@ -80,19 +85,51 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
       } catch {}
     }
 
-    const unsubscribe = camSensor.subscribeStream((frame: Buffer) => {
+    let isWriting = false;
+    let pendingLatestFrame: Buffer | null = null;
+
+    const pushFrame = (frame: Buffer) => {
       if (reply.raw.writableEnded || reply.raw.destroyed) {
         unsubscribe();
         return;
       }
+
+      // If connection is still transmitting previous frame, skip intermediate frames and retain only the newest frame
+      if (isWriting) {
+        pendingLatestFrame = frame;
+        return;
+      }
+
+      isWriting = true;
       try {
-        reply.raw.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
+        const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`;
+        reply.raw.write(header);
         reply.raw.write(frame);
-        reply.raw.write('\r\n');
+        const flushed = reply.raw.write('\r\n');
+
+        if (!flushed) {
+          reply.raw.once('drain', () => {
+            isWriting = false;
+            if (pendingLatestFrame) {
+              const next = pendingLatestFrame;
+              pendingLatestFrame = null;
+              pushFrame(next);
+            }
+          });
+        } else {
+          isWriting = false;
+          if (pendingLatestFrame) {
+            const next = pendingLatestFrame;
+            pendingLatestFrame = null;
+            setImmediate(() => pushFrame(next));
+          }
+        }
       } catch {
         unsubscribe();
       }
-    });
+    };
+
+    const unsubscribe = camSensor.subscribeStream(pushFrame);
 
     request.raw.on('close', () => {
       unsubscribe();
@@ -222,22 +259,37 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
       gpio?: number;
       sensorId?: string;
       power?: boolean;
+      roomId?: string;
     };
   }>('/api/relay/toggle', async (request, reply) => {
-    const { gpio, sensorId, power } = request.body || {};
+    const { gpio, sensorId, power, roomId } = request.body || {};
     let targetRelay: RelaySensor | undefined;
 
     if (sensorId) {
       targetRelay = registry.getSensor(sensorId) as RelaySensor;
     } else if (gpio !== undefined) {
-      targetRelay = registry.getAllSensors().find(
-        s => s.type === 'relay' && s.bcmGpio === gpio
-      ) as RelaySensor;
+      targetRelay = registry.getAllSensors().find(s => s.type === 'relay' && s.bcmGpio === gpio) as RelaySensor;
     } else {
       // Default to primary relay (GPIO 17)
-      targetRelay = registry.getAllSensors().find(
-        s => s.type === 'relay' && (s.bcmGpio === 17 || s.id === 'sensor-relay-17')
-      ) as RelaySensor;
+      targetRelay = registry.getAllSensors().find(s => s.type === 'relay' && (s.bcmGpio === 17 || s.id === 'sensor-relay-17')) as RelaySensor;
+    }
+
+    if (!targetRelay && gpio !== undefined) {
+      const pin = getPinByBcmGpio(gpio);
+      if (pin) {
+        try {
+          targetRelay = (await registry.registerSensor({
+            id: `sensor-relay-${gpio}`,
+            name: `Relay Switch (GPIO ${gpio})`,
+            type: 'relay',
+            pinNumber: pin.pinNumber,
+            bcmGpio: gpio,
+            pollIntervalMs: 0,
+            enabled: true,
+            options: { activeLow: true, roomId }
+          }, false)) as RelaySensor;
+        } catch {}
+      }
     }
 
     if (!targetRelay) {
@@ -246,6 +298,13 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
 
     const nextPower = power !== undefined ? Boolean(power) : !targetRelay.getPower();
     targetRelay.setPower(nextPower, 'local_api');
+
+    const targetRoomId = roomId || targetRelay.config.options?.roomId;
+    if (targetRoomId) {
+      const isAc = Boolean(targetRelay.config.options?.isAcRelay);
+      const field = isAc ? 'ac_power' : 'lights_power';
+      syncGateway.getSensorSync().updateRoomPower(targetRoomId, field, nextPower).catch(() => {});
+    }
 
     return {
       success: true,
@@ -281,6 +340,37 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
   server.get('/api/faces', async () => {
     return {
       faces: faceEngine.getEnrolledPeople()
+    };
+  });
+
+  // Face Recognition: Active neural model roster & matcher diagnostics
+  server.get('/api/camera/models', async () => {
+    const people = faceEngine.getEnrolledPeople();
+    return {
+      success: true,
+      activeMatcherCount: people.length,
+      matchDistanceThreshold: faceEngine.getMatcherThreshold(),
+      models: people.map(p => ({
+        id: p.id,
+        name: p.name,
+        role: p.notes || 'Household Member',
+        enrolledAt: p.enrolledAt,
+        accuracy: p.accuracy ?? 90,
+        photoCount: p.photoCount ?? 1,
+        descriptorDimension: p.descriptor?.length ?? 0,
+        hasDescriptor: Array.isArray(p.descriptor) && p.descriptor.length === 128
+      }))
+    };
+  });
+
+  // Face Recognition: Trigger external model sync from Supabase
+  server.post('/api/camera/models/sync', async () => {
+    const syncResult = await syncGateway.getModelSync().syncAllModelsFromSupabase();
+    return {
+      success: true,
+      syncedCount: syncResult.count,
+      syncedMembers: syncResult.syncedMembers,
+      activeModels: faceEngine.getEnrolledPeople().map(p => p.name)
     };
   });
 

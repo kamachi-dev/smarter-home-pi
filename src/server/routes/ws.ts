@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { WebSocket } from 'ws';
 import { SensorRegistry } from '../../sensors/registry.js';
+import { SmarterHomeSync } from '../../sync/smarterHomeSync.js';
 import { SensorReading, FaceDetectionPayload } from '../../types/index.js';
 
 export const wsRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
@@ -25,6 +26,14 @@ export const wsRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
     broadcast({ type: 'face_detection', event });
   });
 
+  registry.on('pins_updated', (pins: any) => {
+    broadcast({ type: 'pins_updated', pins });
+  });
+
+  registry.on('rooms_updated', (rooms: any) => {
+    broadcast({ type: 'rooms_updated', rooms });
+  });
+
   server.get('/ws/telemetry', { websocket: true }, (connection: any) => {
     const socket: WebSocket = connection.socket || connection;
     clients.add(socket);
@@ -35,7 +44,8 @@ export const wsRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
         type: 'initial_state',
         pins: registry.getPinsWithAssignments(),
         sensors: registry.getAllConfigs(),
-        readings: registry.getLatestReadings()
+        readings: registry.getLatestReadings(),
+        rooms: SmarterHomeSync.getInstance().getCachedRooms()
       }));
     }
 

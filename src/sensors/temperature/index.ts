@@ -135,41 +135,29 @@ export class TemperatureSensor extends BaseSensor {
         }
       }
 
-      // 2c. Read pin status via GpioManager fallback
-      if (tempC === null) {
-        const pinState = this.gpioManager.readPin(this.config.bcmGpio);
-        if (pinState === 0 || pinState === 1) {
-          const delta = (Math.random() - 0.49) * 0.15;
-          this.currentTemp = Math.round(Math.max(16.0, Math.min(35.0, this.currentTemp + delta)) * 10) / 10;
-          this.currentHumidity = Math.round(Math.max(35.0, Math.min(80.0, this.currentHumidity + (Math.random() - 0.49) * 0.3)) * 10) / 10;
-          tempC = this.currentTemp;
-          humidity = this.currentHumidity;
-        }
-      }
     }
 
-    // 3. Fallback when hardware sensor is unattached
+    // 3. Status when hardware sensor is not physically connected or responding
     if (tempC === null || isNaN(tempC)) {
-      const delta = (Math.random() - 0.49) * 0.2;
-      this.currentTemp = Math.round(Math.max(15.0, Math.min(38.0, this.currentTemp + delta)) * 10) / 10;
-      this.currentHumidity = Math.round(Math.max(30.0, Math.min(85.0, this.currentHumidity + (Math.random() - 0.49) * 0.4)) * 10) / 10;
-      tempC = this.currentTemp;
-      humidity = this.currentHumidity;
+      readStatus = 'warning';
+      errorMessage = errorMessage || `Hardware DHT22/DS18B20 sensor not responding on GPIO ${this.config.bcmGpio}`;
+      tempC = this.config.options?.temperature !== undefined ? this.config.options.temperature : null;
+      humidity = this.config.options?.humidity !== undefined ? this.config.options.humidity : null;
     } else {
       this.currentTemp = tempC;
       if (humidity !== null) this.currentHumidity = humidity;
     }
 
-    const tempF = Math.round((this.currentTemp * 1.8 + 32) * 10) / 10;
+    const tempF = tempC !== null ? Math.round((tempC * 1.8 + 32) * 10) / 10 : null;
     const reading: TemperatureReading = {
       sensorId: this.id,
       sensorType: 'temperature',
       timestamp: new Date().toISOString(),
       status: readStatus,
       errorMessage,
-      temperatureC: this.currentTemp,
+      temperatureC: tempC,
       temperatureF: tempF,
-      humidityPct: this.currentHumidity
+      humidityPct: humidity
     };
 
     this.lastReading = reading;

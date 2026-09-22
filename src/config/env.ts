@@ -20,6 +20,9 @@ export interface AppConfig {
   tapoCameraIp: string;
   tapoCameraUser: string;
   tapoCameraPassword: string;
+  supabaseUserEmail: string;
+  supabaseUserPassword: string;
+  faceMatchThreshold: number;
 }
 
 const dataDir = path.resolve(process.cwd(), 'data');
@@ -60,6 +63,9 @@ export const config: AppConfig = {
   tapoCameraIp: process.env.TAPO_CAMERA_IP || '',
   tapoCameraUser: process.env.TAPO_CAMERA_USER || 'CapstoneCam2',
   tapoCameraPassword: process.env.TAPO_CAMERA_PASSWORD || 'OliverSoriano',
+  supabaseUserEmail: process.env.SUPABASE_USER_EMAIL || '',
+  supabaseUserPassword: process.env.SUPABASE_USER_PASSWORD || '',
+  faceMatchThreshold: parseFloat(process.env.FACE_MATCH_THRESHOLD || '0.62'),
 };
 
 export function saveHubConfig(token: string, apiUrl?: string): void {

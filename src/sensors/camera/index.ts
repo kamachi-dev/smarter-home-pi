@@ -17,6 +17,7 @@ export class CameraSensor extends BaseSensor {
   private tapoService: TapoCameraService;
   private cameraProcess: ChildProcess | null = null;
   private latestFrame: Buffer | null = null;
+  private latestRawFrame: Buffer | null = null;
   private isProcessingFace: boolean = false;
   private recognitionTimer: NodeJS.Timeout | null = null;
   private streamListeners: Set<(frame: Buffer) => void> = new Set();
@@ -90,25 +91,58 @@ export class CameraSensor extends BaseSensor {
 
   private tryNextCaptureStrategy(): void {
     const customStreamUrl = this.config.options?.streamUrl || this.config.options?.camera_stream_url;
-    if (!customStreamUrl) {
-      this.startStandbyFrameGenerator();
-      return;
+    const isRpi = this.config.options?.cameraType === 'rpi' ||
+                  this.config.options?.ip === 'rpi-camera' ||
+                  Boolean(customStreamUrl && customStreamUrl.startsWith('rpicam://'));
+
+    let procName = 'ffmpeg';
+    let procArgs: string[] = [];
+
+    if (isRpi) {
+      const hasRpicam = fs.existsSync('/usr/bin/rpicam-vid');
+      if (hasRpicam) {
+        procName = '/usr/bin/rpicam-vid';
+        procArgs = ['-t', '0', '-n', '--width', '640', '--height', '480', '--codec', 'mjpeg', '--framerate', '10', '-o', '-'];
+        console.log(`[CameraSensor] Initializing native CSI camera pipeline for "${this.config.name}" (/usr/bin/rpicam-vid)...`);
+      } else if (fs.existsSync('/dev/video0')) {
+        procName = 'ffmpeg';
+        procArgs = [
+          '-hide_banner', '-loglevel', 'warning',
+          '-f', 'v4l2',
+          '-input_format', 'mjpeg',
+          '-video_size', '640x480',
+          '-framerate', '10',
+          '-i', '/dev/video0',
+          '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-'
+        ];
+        console.log(`[CameraSensor] Initializing V4L2 camera pipeline for "${this.config.name}" (/dev/video0)...`);
+      } else {
+        console.log(`[CameraSensor] Native RPi camera hardware not detected, activating standby frame generator.`);
+        this.startStandbyFrameGenerator();
+        return;
+      }
+    } else {
+      if (!customStreamUrl) {
+        this.startStandbyFrameGenerator();
+        return;
+      }
+
+      // Match VLC's standard RTSP connection options
+      procName = 'ffmpeg';
+      procArgs = [
+        '-hide_banner', '-loglevel', 'warning',
+        '-rtsp_transport', 'tcp',
+        '-i', customStreamUrl,
+        '-vf', 'scale=640:480',
+        '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
+      ];
+      console.log(`[CameraSensor] Ingesting RTSP stream for "${this.config.name}"...`);
     }
 
-    // Match VLC's standard RTSP connection options
-    const ffmpegArgs = [
-      '-hide_banner', '-loglevel', 'warning',
-      '-rtsp_transport', 'tcp',
-      '-i', customStreamUrl,
-      '-vf', 'scale=640:480',
-      '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', '-r', '15', '-'
-    ];
-
-    console.log(`[CameraSensor] Ingesting stream for "${this.config.name}"...`);
     const startTime = Date.now();
 
     try {
-      this.cameraProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      this.cameraProcess = spawn(procName, procArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       this.attachMjpegStreamParser(this.cameraProcess, startTime, this.config.name);
 
       if (this.cameraProcess.stderr) {
@@ -121,14 +155,14 @@ export class CameraSensor extends BaseSensor {
       }
 
       this.cameraProcess.on('error', (err) => {
-        console.warn(`[CameraSensor] ffmpeg process error: ${err.message}`);
+        console.warn(`[CameraSensor] ${procName} process error: ${err.message}`);
         this.startStandbyFrameGenerator();
         setTimeout(() => {
           if (this.isRunning) this.tryNextCaptureStrategy();
         }, 5000);
       });
     } catch (err) {
-      console.warn(`[CameraSensor] Failed to spawn ffmpeg: ${(err as Error).message}`);
+      console.warn(`[CameraSensor] Failed to spawn ${procName}: ${(err as Error).message}`);
       this.startStandbyFrameGenerator();
       setTimeout(() => {
         if (this.isRunning) this.tryNextCaptureStrategy();
@@ -147,6 +181,8 @@ export class CameraSensor extends BaseSensor {
     proc.stdout.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
 
+      let latestCompleteFrame: Buffer | null = null;
+
       while (true) {
         const soi = buffer.indexOf(Buffer.from([0xff, 0xd8]));
         if (soi === -1) {
@@ -160,40 +196,33 @@ export class CameraSensor extends BaseSensor {
         // Look for the next SOI to extract complete unbroken JPEG frame
         const nextSoi = buffer.indexOf(Buffer.from([0xff, 0xd8]), 2);
         if (nextSoi !== -1) {
-          const jpegFrame = buffer.subarray(0, nextSoi);
+          latestCompleteFrame = buffer.subarray(0, nextSoi);
           buffer = buffer.subarray(nextSoi);
-
-          if (!receivedAnyFrame) {
-            receivedAnyFrame = true;
-            if (this.simulationInterval) {
-              clearInterval(this.simulationInterval);
-              this.simulationInterval = null;
-            }
-            console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
-          }
-          this.onNewCameraFrame(jpegFrame);
           continue;
         }
 
         // If no next SOI yet, check for EOI followed by bytes
         const eoi = buffer.indexOf(Buffer.from([0xff, 0xd9]), 2);
         if (eoi !== -1 && buffer.length > eoi + 4) {
-          const jpegFrame = buffer.subarray(0, eoi + 2);
+          latestCompleteFrame = buffer.subarray(0, eoi + 2);
           buffer = buffer.subarray(eoi + 2);
-
-          if (!receivedAnyFrame) {
-            receivedAnyFrame = true;
-            if (this.simulationInterval) {
-              clearInterval(this.simulationInterval);
-              this.simulationInterval = null;
-            }
-            console.log(`[CameraSensor] ✅ SUCCESS: Live Tapo IP camera frames streaming successfully via [${strategyName}]!`);
-          }
-          this.onNewCameraFrame(jpegFrame);
           continue;
         }
 
         break;
+      }
+
+      // Skip intermediate frames and always display & process ONLY the last frame of the stream
+      if (latestCompleteFrame) {
+        if (!receivedAnyFrame) {
+          receivedAnyFrame = true;
+          if (this.simulationInterval) {
+            clearInterval(this.simulationInterval);
+            this.simulationInterval = null;
+          }
+          console.log(`[CameraSensor] ✅ SUCCESS: Live camera frames streaming successfully via [${strategyName}]!`);
+        }
+        this.onNewCameraFrame(latestCompleteFrame);
       }
     });
 
@@ -232,15 +261,20 @@ export class CameraSensor extends BaseSensor {
   /**
    * Processes each camera frame in real-time.
    * Ensures facial recognition and annotation is performed before distributing the frame.
+   * Always displays the last frame of the stream, skipping intermediate frames.
    */
   private onNewCameraFrame(rawFrame: Buffer): void {
-    // If recognition engine is idle, process immediately so HUD annotation is always up to date
+    this.latestRawFrame = rawFrame;
+
+    // Immediately display the latest frame using active face detection annotations
+    const annotated = this.currentDetection?.detected
+      ? FrameAnnotator.annotateFrame(rawFrame, this.currentDetection)
+      : rawFrame;
+    this.broadcastFrame(annotated);
+
+    // If recognition engine is idle, process face recognition on the latest frame
     if (!this.isProcessingFace) {
       this.processFaceRecognitionAsync(rawFrame);
-    } else {
-      // If recognition is currently calculating previous frame, annotate with latest known detection
-      const annotated = FrameAnnotator.annotateFrame(rawFrame, this.currentDetection);
-      this.broadcastFrame(annotated);
     }
   }
 
@@ -262,20 +296,30 @@ export class CameraSensor extends BaseSensor {
       this.currentDetection = detection;
       this.emit('face_detection', detection);
 
-      // Annotate frame with AI recognition boxes, reticles, labels & HUD
-      const annotatedFrame = FrameAnnotator.annotateFrame(rawFrame, detection);
-      this.broadcastFrame(annotatedFrame);
+      // Re-annotate and broadcast the current latest frame if a face is detected
+      if (this.latestRawFrame && detection.detected) {
+        const annotatedFrame = FrameAnnotator.annotateFrame(this.latestRawFrame, detection);
+        this.broadcastFrame(annotatedFrame);
+      }
 
       // Evaluate PresenceTracker to capture FIRST FRAME of any newly recognized people
-      const newlyArrived = this.presenceTracker.processDetection(detection, annotatedFrame);
+      const newlyArrived = this.presenceTracker.processDetection(detection, rawFrame);
       for (const arrival of newlyArrived) {
         this.emit('person_arrival', arrival);
       }
     } catch (err) {
       console.error('[CameraSensor] Face recognition error:', (err as Error).message);
-      this.broadcastFrame(rawFrame);
     } finally {
       this.isProcessingFace = false;
+      // If a newer frame arrived while calculating, immediately process the latest frame (skipping intermediate frames)
+      if (this.latestRawFrame && this.latestRawFrame !== rawFrame) {
+        const next = this.latestRawFrame;
+        setImmediate(() => {
+          if (this.isRunning && !this.isProcessingFace) {
+            this.processFaceRecognitionAsync(next);
+          }
+        });
+      }
     }
   }
 

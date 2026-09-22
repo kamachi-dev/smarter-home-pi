@@ -88,7 +88,7 @@ export class CameraSyncHandler {
       } catch {}
     }
 
-    if (config.smarterHomeApiUrl) {
+    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/camera/live`;
         await fetch(targetUrl, {
@@ -288,7 +288,7 @@ export class CameraSyncHandler {
       }
     }
 
-    if (config.smarterHomeApiUrl) {
+    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
         await fetch(targetUrl, {
