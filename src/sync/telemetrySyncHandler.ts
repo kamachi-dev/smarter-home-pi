@@ -33,6 +33,9 @@ export class TelemetrySyncHandler {
     const faceState: FaceDetectionPayload | null = camSensor && 'getFaceDetection' in camSensor 
       ? (camSensor as any).getFaceDetection() 
       : null;
+    const motionState = camSensor && 'getLatestMotion' in camSensor 
+      ? (camSensor as any).getLatestMotion() 
+      : null;
 
     const isoNow = new Date().toISOString();
     const payload = {
@@ -42,6 +45,8 @@ export class TelemetrySyncHandler {
       telemetry: {
         temperature: tempReading?.temperatureC ?? null,
         humidity: tempReading?.humidityPct ?? null,
+        motionDetected: motionState?.hasMotion ?? false,
+        motionScore: motionState?.score ?? 0,
         faceDetection: faceState ? {
           detected: faceState.detected,
           status: faceState.status,

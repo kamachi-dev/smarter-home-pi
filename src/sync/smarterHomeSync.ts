@@ -313,6 +313,10 @@ export class SmarterHomeSync {
           this.cameraSync.sendLiveFrame(frame, sensor.getFaceDetection?.(), roomId).catch(() => {});
         });
 
+        sensor.on('motion_detected', (motion: any) => {
+          this.cameraSync.sendMotionAlert(motion).catch(() => {});
+        });
+
         sensor.on('person_arrival', (arrival: any) => {
           this.cameraSync.sendFirstFrameArrival(arrival, sensor.id, sensor.config?.name || 'Room Camera').catch(() => {});
         });

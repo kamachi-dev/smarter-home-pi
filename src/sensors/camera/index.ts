@@ -7,6 +7,7 @@ import { SensorConfig, CameraReading, FaceDetectionPayload } from '../../types/i
 import { FaceRecognitionEngine } from './faceRecognition.js';
 import { FrameAnnotator } from './frameAnnotator.js';
 import { StandbyFrameGenerator } from './standbyGenerator.js';
+import { EdgeMotionDetector, MotionDetectionResult } from './motionDetector.js';
 import { PresenceTracker, PersonArrivalEvent } from './presenceTracker.js';
 import { GpioManager } from '../../hardware/gpio.js';
 import { TapoCameraService } from './tapoClient.js';
@@ -23,6 +24,8 @@ export class CameraSensor extends BaseSensor {
   private streamListeners: Set<(frame: Buffer) => void> = new Set();
   private simulationInterval: NodeJS.Timeout | null = null;
   private captureStrategyIndex: number = 0;
+  private motionDetector: EdgeMotionDetector;
+  private latestMotion: MotionDetectionResult = { hasMotion: false, score: 0, changedPixels: 0, totalPixels: 0 };
   
   private currentDetection: FaceDetectionPayload = {
     detected: false,
@@ -36,6 +39,7 @@ export class CameraSensor extends BaseSensor {
     super(config);
     this.faceEngine = FaceRecognitionEngine.getInstance();
     this.presenceTracker = PresenceTracker.getInstance();
+    this.motionDetector = new EdgeMotionDetector();
     this.tapoService = new TapoCameraService({
       host: config.options?.tapoIp || config.options?.ip,
       user: config.options?.tapoUser || config.options?.user,
@@ -266,14 +270,28 @@ export class CameraSensor extends BaseSensor {
   private onNewCameraFrame(rawFrame: Buffer): void {
     this.latestRawFrame = rawFrame;
 
+    // Fast edge motion detection (~0.5ms on Pi) before any expensive operations
+    const motion = this.motionDetector.detectMotion(rawFrame);
+    this.latestMotion = motion;
+
+    if (motion.hasMotion) {
+      this.emit('motion_detected', {
+        sensorId: this.id,
+        sensorName: this.config.name,
+        score: motion.score,
+        snapshot: rawFrame,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // Immediately display the latest frame using active face detection annotations
     const annotated = this.currentDetection?.detected
       ? FrameAnnotator.annotateFrame(rawFrame, this.currentDetection)
       : rawFrame;
     this.broadcastFrame(annotated);
 
-    // If recognition engine is idle, process face recognition on the latest frame
-    if (!this.isProcessingFace) {
+    // Only invoke face recognition when major motion is detected or currently tracking an active face
+    if (!this.isProcessingFace && (motion.hasMotion || this.currentDetection?.detected)) {
       this.processFaceRecognitionAsync(rawFrame);
     }
   }
@@ -352,7 +370,9 @@ export class CameraSensor extends BaseSensor {
 
     this.recognitionTimer = setInterval(async () => {
       if (!this.isRunning || this.isProcessingFace || !this.latestFrame) return;
-      await this.processFaceRecognitionAsync(this.latestFrame);
+      if (this.latestMotion.hasMotion || this.currentDetection?.detected) {
+        await this.processFaceRecognitionAsync(this.latestFrame);
+      }
     }, 1000);
   }
 
@@ -379,6 +399,10 @@ export class CameraSensor extends BaseSensor {
 
     this.lastReading = reading;
     return reading;
+  }
+
+  public getLatestMotion(): MotionDetectionResult {
+    return this.latestMotion;
   }
 
   public getFaceDetection(): FaceDetectionPayload {

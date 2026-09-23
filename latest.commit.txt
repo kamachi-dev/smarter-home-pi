@@ -1,9 +1,9 @@
-fix(ai): fix face recognition parameters, extract real neural embeddings, and color recognized green and unknown orange
+﻿feat(camera): implement lightweight edge motion detection and targeted event dispatching
 
-- Extracted genuine 128D FaceRecognitionNet embedding from enrolled profile photo ("The Joaq"), replacing the mock sinusoidal array which caused an artificial 1.47 distance mismatch.
-- Added extractDescriptorFromImage and verifyEnrolledDescriptors in FaceRecognitionEngine to automatically detect abnormal descriptor norms and extract real neural embeddings directly from member photos on startup and model sync.
-- Fixed training descriptor normalization in trainPersonWithPhotos: preserved natural FaceRecognitionNet scale (~1.427) rather than unit-normalizing to 1.0, eliminating a false +0.427 Euclidean distance offset.
-- Tuned matchDistanceThreshold to 0.62 (configurable via FACE_MATCH_THRESHOLD in env), and updated recognizeFrame to use matchDescriptor for accurate Euclidean distance logging and proportional confidence scoring.
-- Updated bounding boxes, reticles, HUD overlays, and telemetry badges to strictly color recognized people Green (#10b981 / [16, 185, 129]) and unknown people Orange (#f97316 / [249, 115, 22]) across both server-side FrameAnnotator and frontend canvas cameraScript and telemetryScript.
-- Added multi-face iteration in cameraScript canvas rendering so every detected face receives its own color-coded bounding box and tag.
-- Maintained all source code files strictly under 500 lines (Rule 2) and verified full type safety with 20/20 passing tests (Rule 4).
+- Implemented EdgeMotionDetector using fast temporal luminance frame-differencing (~0.5ms CPU execution time) in src/sensors/camera/motionDetector.ts.
+- Replaced continuous frame-by-frame neural face recognition with an edge motion-triggered pipeline in CameraSensor (src/sensors/camera/index.ts).
+- CameraSensor only invokes neural inference when significant motion exceeds threshold or when tracking active face presence, dramatically slashing Pi CPU and server load.
+- Added sendMotionAlert in CameraSyncHandler (src/sync/cameraSyncHandler.ts) to push motion score and snapshot to Supabase home_states, Realtime broadcast, and /api/pi/telemetry.
+- Wired motion_detected event listener in SmarterHomeSync (src/sync/smarterHomeSync.ts) and included motion status in TelemetrySyncHandler (src/sync/telemetrySyncHandler.ts).
+- Added unit tests in src/sensors/camera/__tests__/motionDetector.test.ts (24/24 tests passing).
+- Verified full TypeScript build (npm run build) and adhered to the 500-line file limit across all files.

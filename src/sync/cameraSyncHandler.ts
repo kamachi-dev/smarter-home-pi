@@ -310,4 +310,98 @@ export class CameraSyncHandler {
 
     return supabaseHandled;
   }
+
+  /**
+   * Dispatches edge-detected motion alert to Supabase and Smarter Home telemetry API.
+   * Passes the motion score and JPEG snapshot for Gemini situation analysis without continuous facial inference.
+   */
+  public async sendMotionAlert(
+    event: { sensorId: string; sensorName: string; score: number; snapshot: Buffer; timestamp?: string }
+  ): Promise<boolean> {
+    const isoNow = event.timestamp || new Date().toISOString();
+    const base64Image = `data:image/jpeg;base64,${event.snapshot.toString('base64')}`;
+    let supabaseHandled = false;
+
+    if (this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        if (homeId) {
+          const timeStr = new Date(isoNow).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const motionLog = {
+            id: Date.now(),
+            time: timeStr,
+            event: `Major Motion Detected (${event.score}% delta)`,
+            location: event.sensorName || 'Camera Room',
+            severity: 'warning',
+            snapshot: base64Image
+          };
+
+          const { data: existingLogsState } = await this.supabase
+            .from('home_states')
+            .select('value')
+            .eq('home_id', homeId)
+            .eq('key', 'logs')
+            .maybeSingle();
+
+          const currentLogs = Array.isArray(existingLogsState?.value) ? existingLogsState.value : [];
+          await this.supabase.from('home_states').upsert([
+            { home_id: homeId, key: 'motionDetected', value: true, updated_at: isoNow },
+            { home_id: homeId, key: 'logs', value: [motionLog, ...currentLogs].slice(0, 50), updated_at: isoNow }
+          ], { onConflict: 'home_id,key' });
+
+          await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {
+            method: 'POST',
+            headers: {
+              'apikey': config.supabaseKey,
+              'Authorization': `Bearer ${config.supabaseKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messages: [{
+                topic: `home-security-${homeId}`,
+                event: 'motion_alert',
+                payload: {
+                  location: event.sensorName || 'Camera Room',
+                  score: event.score,
+                  snapshot: base64Image,
+                  timestamp: isoNow
+                }
+              }]
+            })
+          }).catch(() => {});
+
+          supabaseHandled = true;
+          console.log(`[CameraSyncHandler] 🏃 Dispatched edge motion alert (${event.score}% delta) to Supabase`);
+        }
+      } catch (err) {
+        console.error('[CameraSyncHandler] Motion alert sync error:', (err as Error).message);
+      }
+    }
+
+    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
+      try {
+        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
+        await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-pi-token': config.smarterHomeToken,
+            'x-pi-api-key': config.smarterHomeApiKey
+          },
+          body: JSON.stringify({
+            source: 'raspberry-pi-camera',
+            type: 'motion_alert',
+            data: {
+              location: event.sensorName || 'Camera Room',
+              score: event.score,
+              snapshot: base64Image
+            }
+          }),
+          signal: AbortSignal.timeout(3000)
+        });
+      } catch {}
+    }
+
+    return supabaseHandled;
+  }
 }

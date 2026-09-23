@@ -93,7 +93,14 @@ export interface FaceDetectionPayload {
   faces?: DetectedFace[];
 }
 
+export interface MotionDetectionPayload {
+  motionDetected: boolean;
+  score: number;
+  timestamp: string;
+}
+
 export interface CameraReading extends BaseReading {
+  motionDetection?: MotionDetectionPayload;
   sensorType: 'camera';
   faceDetection: FaceDetectionPayload;
   snapshotBase64?: string;
