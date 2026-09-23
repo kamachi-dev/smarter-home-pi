@@ -14,10 +14,11 @@ export const telemetryScript = `
     async function init() {
       try { startCanvasRenderLoop(); } catch (e) { console.error('Render loop error:', e); }
       try { setupWebSocket(); } catch (e) {}
+      // 1. Establish status and home token connection FIRST before querying rooms, pins, and faces
+      await fetchStatus();
       await Promise.allSettled([
         fetchRooms(),
         fetchPins(),
-        fetchStatus(),
         fetchFaces()
       ]);
     }

@@ -354,6 +354,11 @@ export const modalScript = `
             btnLabel.textContent = token ? 'Home Linked ✅' : 'Link Home Token';
           }
           await fetchStatus();
+          await Promise.allSettled([
+            fetchRooms(),
+            typeof fetchPins === 'function' ? fetchPins() : Promise.resolve(),
+            typeof fetchFaces === 'function' ? fetchFaces() : Promise.resolve()
+          ]);
         } else {
           alert('Error: ' + data.error);
         }

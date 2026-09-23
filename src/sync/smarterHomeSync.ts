@@ -479,4 +479,11 @@ export class SmarterHomeSync {
   public async getHomeId(): Promise<string | null> {
     return this.getLinkedHomeId();
   }
+
+  public async reloadHubToken(): Promise<void> {
+    this.cachedHomeId = null;
+    await this.getLinkedHomeId();
+    await this.syncRoomsFromSupabase();
+    await this.modelSync.syncAllModelsFromSupabase().catch(() => {});
+  }
 }

@@ -1,9 +1,7 @@
-refactor(camera): disable continuous edge facial recognition loop in favor of lightweight motion detection
+﻿fix(sync): wait for device token before fetching rooms and hardware pins
 
-- Completely removed the continuous background face recognition timer (startFaceRecognitionPipeline) and per-frame recognition calls from CameraSensor in src/sensors/camera/index.ts.
-- CameraSensor now purely performs fast luminance motion detection on incoming frames and dispatches motion_detected alerts, eliminating Raspberry Pi CPU thrashing and facial recognition log spam.
-- Converted FaceRecognitionEngine to lazy initialization (ensureInitialized) so TensorFlow Wasm models and weights are loaded only on explicit, on-demand requests (e.g. POST /api/faces/train or POST /api/camera/frame).
-- Removed eager FaceRecognitionEngine instantiation from server startup bootstrap in src/index.ts.
-- Silenced noisy frame match and unmatched logs in FaceRecognitionEngine to keep stdout clean.
-- Verified all 24 unit tests pass with npm test and clean compilation with npm run build (tsc).
-- Ensured all modified files remain strictly under the 500-line limit (faceRecognition.ts at 495 lines, index.ts at 419 lines).
+- Sequenced dashboard init() to fetchStatus() and resolve permanent token before querying rooms, pins, and faces.
+- Added reloadHubToken() to SmarterHomeSync to clear cached home ID, re-query linked home from home_tokens, and re-sync rooms and models.
+- Updated POST /api/config/token to reload hub token immediately upon saving.
+- Added automatic re-fetch of rooms, pins, and faces in modalScript upon saving or updating token.
+- Verified all 24 unit and integration tests pass with npm test and clean tsc compilation with npm run build.

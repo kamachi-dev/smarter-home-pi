@@ -482,6 +482,7 @@ export const apiRoutes: FastifyPluginAsync = async (server: FastifyInstance) => 
     }
 
     saveHubConfig(token.trim(), apiUrl?.trim());
+    await syncGateway.reloadHubToken();
     const syncSuccess = await syncGateway.syncTelemetry();
 
     return {
