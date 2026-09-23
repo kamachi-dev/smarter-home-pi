@@ -20,7 +20,7 @@ export class FaceRecognitionEngine {
   private matchDistanceThreshold = config.faceMatchThreshold || 0.62;
 
   private constructor() {
-    this.initPromise = this.initNeuralModels();
+    // Defer neural model loading until first on-demand call
   }
 
   public static getInstance(): FaceRecognitionEngine {
@@ -28,6 +28,12 @@ export class FaceRecognitionEngine {
       FaceRecognitionEngine.instance = new FaceRecognitionEngine();
     }
     return FaceRecognitionEngine.instance;
+  }
+
+  public async ensureInitialized(): Promise<void> {
+    if (this.isInitialized) return;
+    if (!this.initPromise) this.initPromise = this.initNeuralModels();
+    return this.initPromise;
   }
 
   private async initNeuralModels(): Promise<void> {
@@ -136,7 +142,7 @@ export class FaceRecognitionEngine {
     notes?: string,
     customId?: string
   ): Promise<EnrolledPerson> {
-    if (this.initPromise) await this.initPromise;
+    await this.ensureInitialized();
 
     if (photos.length < 10) {
       throw new Error(`Facial recognition training requires at least 10 distinct photos (received ${photos.length}).`);
@@ -244,7 +250,7 @@ export class FaceRecognitionEngine {
    */
   public async recognizeFrame(imageBuffer?: Buffer): Promise<FaceDetectionPayload> {
     const timestamp = new Date().toISOString();
-    if (this.initPromise) await this.initPromise;
+    await this.ensureInitialized();
 
     if (!imageBuffer || imageBuffer.length === 0) {
       return {
@@ -325,9 +331,7 @@ export class FaceRecognitionEngine {
             isMatch = true;
             personName = candidate;
             conf = Math.round(Math.max(0.60, 1 - (dist * 0.7)) * 100) / 100;
-            console.log(`[FaceRecognitionEngine] 👤 Matched: "${personName}" (dist: ${dist.toFixed(3)} <= ${this.matchDistanceThreshold}, conf: ${conf})`);
           } else {
-            console.log(`[FaceRecognitionEngine] ❓ Unmatched face (closest: "${candidate}", dist: ${dist.toFixed(3)} > ${this.matchDistanceThreshold})`);
           }
         }
 
@@ -485,12 +489,6 @@ export class FaceRecognitionEngine {
     return [...this.enrolledPeople];
   }
 
-  public getMatcherThreshold(): number {
-    return this.matchDistanceThreshold;
-  }
-
-  public setMatcherThreshold(threshold: number): void {
-    this.matchDistanceThreshold = threshold;
-    this.rebuildFaceMatcher();
-  }
+  public getMatcherThreshold(): number { return this.matchDistanceThreshold; }
+  public setMatcherThreshold(threshold: number): void { this.matchDistanceThreshold = threshold; this.rebuildFaceMatcher(); }
 }

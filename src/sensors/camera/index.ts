@@ -13,7 +13,7 @@ import { GpioManager } from '../../hardware/gpio.js';
 import { TapoCameraService } from './tapoClient.js';
 
 export class CameraSensor extends BaseSensor {
-  private faceEngine: FaceRecognitionEngine;
+  private faceEngine: FaceRecognitionEngine | null = null;
   private presenceTracker: PresenceTracker;
   private tapoService: TapoCameraService;
   private cameraProcess: ChildProcess | null = null;
@@ -55,7 +55,6 @@ export class CameraSensor extends BaseSensor {
 
   public override start(): void {
     super.start();
-    this.startFaceRecognitionPipeline();
   }
 
   public override stop(): void {
@@ -290,10 +289,8 @@ export class CameraSensor extends BaseSensor {
       : rawFrame;
     this.broadcastFrame(annotated);
 
-    // Only invoke face recognition when major motion is detected or currently tracking an active face
-    if (!this.isProcessingFace && (motion.hasMotion || this.currentDetection?.detected)) {
-      this.processFaceRecognitionAsync(rawFrame);
-    }
+    // Continuous edge face recognition is disabled to save RPi CPU load;
+    // Frame motion alerts are broadcast for cloud/Gemini on-demand verification.
   }
 
   private broadcastFrame(frame: Buffer): void {
@@ -310,6 +307,7 @@ export class CameraSensor extends BaseSensor {
   private async processFaceRecognitionAsync(rawFrame: Buffer): Promise<void> {
     this.isProcessingFace = true;
     try {
+      if (!this.faceEngine) this.faceEngine = FaceRecognitionEngine.getInstance();
       const detection = await this.faceEngine.recognizeFrame(rawFrame);
       this.currentDetection = detection;
       this.emit('face_detection', detection);
@@ -346,6 +344,7 @@ export class CameraSensor extends BaseSensor {
    * executes facial recognition, places recognition squares, and updates live footage.
    */
   public async ingestFrame(frameBuffer: Buffer): Promise<{ detection: FaceDetectionPayload; annotatedFrame: Buffer }> {
+    if (!this.faceEngine) this.faceEngine = FaceRecognitionEngine.getInstance();
     const detection = await this.faceEngine.recognizeFrame(frameBuffer);
     this.currentDetection = detection;
     this.emit('face_detection', detection);

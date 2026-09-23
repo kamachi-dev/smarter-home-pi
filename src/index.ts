@@ -7,7 +7,6 @@ import { roomRoutes } from './server/routes/rooms.js';
 import { wsRoutes } from './server/routes/ws.js';
 import { dashboardHtml } from './server/dashboard.js';
 import { SensorRegistry } from './sensors/registry.js';
-import { FaceRecognitionEngine } from './sensors/camera/faceRecognition.js';
 import { SmarterHomeSync } from './sync/smarterHomeSync.js';
 import { GpioManager } from './hardware/gpio.js';
 
@@ -38,7 +37,6 @@ async function bootstrap() {
   // Initialize hardware & subsystems
   const gpio = GpioManager.getInstance();
   const registry = SensorRegistry.getInstance();
-  const faceEngine = FaceRecognitionEngine.getInstance();
   const syncGateway = SmarterHomeSync.getInstance();
 
   console.log('====================================================');

@@ -1,9 +1,9 @@
-﻿feat(camera): implement lightweight edge motion detection and targeted event dispatching
+refactor(camera): disable continuous edge facial recognition loop in favor of lightweight motion detection
 
-- Implemented EdgeMotionDetector using fast temporal luminance frame-differencing (~0.5ms CPU execution time) in src/sensors/camera/motionDetector.ts.
-- Replaced continuous frame-by-frame neural face recognition with an edge motion-triggered pipeline in CameraSensor (src/sensors/camera/index.ts).
-- CameraSensor only invokes neural inference when significant motion exceeds threshold or when tracking active face presence, dramatically slashing Pi CPU and server load.
-- Added sendMotionAlert in CameraSyncHandler (src/sync/cameraSyncHandler.ts) to push motion score and snapshot to Supabase home_states, Realtime broadcast, and /api/pi/telemetry.
-- Wired motion_detected event listener in SmarterHomeSync (src/sync/smarterHomeSync.ts) and included motion status in TelemetrySyncHandler (src/sync/telemetrySyncHandler.ts).
-- Added unit tests in src/sensors/camera/__tests__/motionDetector.test.ts (24/24 tests passing).
-- Verified full TypeScript build (npm run build) and adhered to the 500-line file limit across all files.
+- Completely removed the continuous background face recognition timer (startFaceRecognitionPipeline) and per-frame recognition calls from CameraSensor in src/sensors/camera/index.ts.
+- CameraSensor now purely performs fast luminance motion detection on incoming frames and dispatches motion_detected alerts, eliminating Raspberry Pi CPU thrashing and facial recognition log spam.
+- Converted FaceRecognitionEngine to lazy initialization (ensureInitialized) so TensorFlow Wasm models and weights are loaded only on explicit, on-demand requests (e.g. POST /api/faces/train or POST /api/camera/frame).
+- Removed eager FaceRecognitionEngine instantiation from server startup bootstrap in src/index.ts.
+- Silenced noisy frame match and unmatched logs in FaceRecognitionEngine to keep stdout clean.
+- Verified all 24 unit tests pass with npm test and clean compilation with npm run build (tsc).
+- Ensured all modified files remain strictly under the 500-line limit (faceRecognition.ts at 495 lines, index.ts at 419 lines).
