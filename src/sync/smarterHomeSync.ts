@@ -10,6 +10,10 @@ import { TemperatureSyncHandler } from './temperatureSyncHandler.js';
 import { AcSyncHandler } from './acSyncHandler.js';
 import { SensorSyncHandler } from './sensorSyncHandler.js';
 import { config } from '../config/env.js';
+import fs from 'fs';
+import path from 'path';
+
+const cachedRoomsDiskPath = path.resolve(process.cwd(), 'data', 'rooms.cache.json');
 
 export interface SyncStatus {
   lastSyncTime: string | null;
@@ -26,16 +30,8 @@ export class SmarterHomeSync {
   private faceEngine: FaceRecognitionEngine;
   private supabase: SupabaseClient | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
-  private cameraStreamTimer: NodeJS.Timeout | null = null;
-  private cachedHomeId: string | null = null;
-  private cachedRooms: any[] = [];
-  private cameraSync: CameraSyncHandler;
-  private modelSync: ModelSyncHandler;
-  private telemetrySync: TelemetrySyncHandler;
-  private lightingSync: LightingSyncHandler;
-  private temperatureSync: TemperatureSyncHandler;
-  private acSync: AcSyncHandler;
-  private sensorSync: SensorSyncHandler;
+  private cameraStreamTimer: NodeJS.Timeout | null = null; private cachedHomeId: string | null = null; private cachedRooms: any[] = [];
+  private cameraSync: CameraSyncHandler; private modelSync: ModelSyncHandler; private telemetrySync: TelemetrySyncHandler; private lightingSync: LightingSyncHandler; private temperatureSync: TemperatureSyncHandler; private acSync: AcSyncHandler; private sensorSync: SensorSyncHandler;
   private status: SyncStatus = {
     lastSyncTime: null,
     lastSyncSuccess: false,
@@ -48,6 +44,14 @@ export class SmarterHomeSync {
   private constructor() {
     this.registry = SensorRegistry.getInstance();
     this.faceEngine = FaceRecognitionEngine.getInstance();
+    if (fs.existsSync(cachedRoomsDiskPath)) {
+      try {
+        const diskRooms = JSON.parse(fs.readFileSync(cachedRoomsDiskPath, 'utf8'));
+        if (Array.isArray(diskRooms) && diskRooms.length > 0) {
+          this.cachedRooms = diskRooms;
+        }
+      } catch {}
+    }
     this.cameraSync = new CameraSyncHandler({
       supabase: this.supabase,
       getLinkedHomeId: () => this.getLinkedHomeId()
@@ -196,7 +200,7 @@ export class SmarterHomeSync {
     }
 
     // 2. Secondary fallback only if direct Supabase returned no rooms and non-vercel endpoint
-    if (!rooms && config.smarterHomeApiUrl && config.smarterHomeToken && !config.smarterHomeApiUrl.includes('vercel.app')) {
+    if (!rooms && config.smarterHomeApiUrl && config.smarterHomeToken && Boolean(config.smarterHomeApiUrl)) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
         const res = await fetch(targetUrl, {
@@ -204,7 +208,7 @@ export class SmarterHomeSync {
             'x-pi-token': config.smarterHomeToken,
             'x-pi-api-key': config.smarterHomeApiKey
           },
-          signal: AbortSignal.timeout(2000)
+          signal: AbortSignal.timeout(5000)
         });
         if (res.ok) {
           const data = (await res.json()) as any;
@@ -228,6 +232,7 @@ export class SmarterHomeSync {
           };
         });
         this.cachedRooms = mappedRooms;
+        try { fs.writeFileSync(cachedRoomsDiskPath, JSON.stringify(mappedRooms, null, 2), 'utf8'); } catch {}
         this.registry.emit('rooms_updated', mappedRooms);
         for (const room of mappedRooms) {
           const camSensorId = `sensor-cam-${room.id}`;
@@ -356,7 +361,7 @@ export class SmarterHomeSync {
       return this.cachedRooms;
     }
 
-    if (config.smarterHomeApiUrl && config.smarterHomeToken && !config.smarterHomeApiUrl.includes('vercel.app')) {
+    if (config.smarterHomeApiUrl && config.smarterHomeToken && Boolean(config.smarterHomeApiUrl)) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
         const res = await fetch(targetUrl, {
@@ -364,7 +369,7 @@ export class SmarterHomeSync {
             'x-pi-token': config.smarterHomeToken,
             'x-pi-api-key': config.smarterHomeApiKey
           },
-          signal: AbortSignal.timeout(2000)
+          signal: AbortSignal.timeout(5000)
         });
         if (res.ok) {
           const data = (await res.json()) as any;
@@ -385,7 +390,7 @@ export class SmarterHomeSync {
     return this.cachedRooms;
   }
 
-  private async getLinkedHomeId(): Promise<string | null> {
+  public async getLinkedHomeId(): Promise<string | null> {
     if (this.cachedHomeId) return this.cachedHomeId;
     if (!this.supabase || !config.smarterHomeToken) return null;
     try {

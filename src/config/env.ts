@@ -23,6 +23,7 @@ export interface AppConfig {
   supabaseUserEmail: string;
   supabaseUserPassword: string;
   faceMatchThreshold: number;
+  mqttBrokerUrl: string;
 }
 
 const dataDir = path.resolve(process.cwd(), 'data');
@@ -66,6 +67,7 @@ export const config: AppConfig = {
   supabaseUserEmail: process.env.SUPABASE_USER_EMAIL || '',
   supabaseUserPassword: process.env.SUPABASE_USER_PASSWORD || '',
   faceMatchThreshold: parseFloat(process.env.FACE_MATCH_THRESHOLD || '0.62'),
+  mqttBrokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
 };
 
 export function saveHubConfig(token: string, apiUrl?: string): void {

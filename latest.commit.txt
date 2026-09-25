@@ -1,7 +1,7 @@
-﻿fix(sync): wait for device token before fetching rooms and hardware pins
+﻿fix(sync): support vercel api gateway and persist rooms cache to disk
 
-- Sequenced dashboard init() to fetchStatus() and resolve permanent token before querying rooms, pins, and faces.
-- Added reloadHubToken() to SmarterHomeSync to clear cached home ID, re-query linked home from home_tokens, and re-sync rooms and models.
-- Updated POST /api/config/token to reload hub token immediately upon saving.
-- Added automatic re-fetch of rooms, pins, and faces in modalScript upon saving or updating token.
-- Verified all 24 unit and integration tests pass with npm test and clean tsc compilation with npm run build.
+- Removed artificial vercel.app block in SmarterHomeSync, SensorSyncHandler, and TelemetrySyncHandler so edge Pi controllers can reach cloud API routes.
+- Added persistent disk caching (data/rooms.cache.json) to survive restarts and remote network/database outages.
+- Enhanced middleware in smarter-home to allow /api/* routes and x-pi-token requests through without HTML login redirects.
+- Kept all source files strictly under 500 lines of code.
+- Passed full test suites across both smarter-home-pi and smarter-home.

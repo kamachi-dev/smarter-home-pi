@@ -72,7 +72,7 @@ export class SensorSyncHandler {
     }
 
     // 2. Fallback to Smarter Home REST API if direct query returned no rooms
-    if (rooms.length === 0 && config.smarterHomeApiUrl && config.smarterHomeToken && !config.smarterHomeApiUrl.includes('vercel.app')) {
+    if (rooms.length === 0 && config.smarterHomeApiUrl && config.smarterHomeToken && Boolean(config.smarterHomeApiUrl)) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
         const res = await fetch(targetUrl, {

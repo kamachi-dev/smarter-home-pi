@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SensorRegistry } from '../sensors/registry.js';
 import { FaceDetectionPayload, TemperatureReading } from '../types/index.js';
 import { config } from '../config/env.js';
+import { MqttBridgeService } from './mqttBridge.js';
 
 export interface TelemetrySyncOptions {
   supabase: SupabaseClient | null;
@@ -103,7 +104,7 @@ export class TelemetrySyncHandler {
     }
 
     let httpSynced = false;
-    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
+    if (config.smarterHomeApiUrl && Boolean(config.smarterHomeApiUrl)) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
         const response = await fetch(targetUrl, {
@@ -174,7 +175,7 @@ export class TelemetrySyncHandler {
       } catch {}
     }
 
-    if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
+    if (config.smarterHomeApiUrl && Boolean(config.smarterHomeApiUrl)) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/telemetry`;
         await fetch(targetUrl, {

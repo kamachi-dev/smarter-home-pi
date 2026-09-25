@@ -8,6 +8,7 @@ import { wsRoutes } from './server/routes/ws.js';
 import { dashboardHtml } from './server/dashboard.js';
 import { SensorRegistry } from './sensors/registry.js';
 import { SmarterHomeSync } from './sync/smarterHomeSync.js';
+import { MqttBridgeService } from './sync/mqttBridge.js';
 import { GpioManager } from './hardware/gpio.js';
 
 async function bootstrap() {
@@ -38,6 +39,7 @@ async function bootstrap() {
   const gpio = GpioManager.getInstance();
   const registry = SensorRegistry.getInstance();
   const syncGateway = SmarterHomeSync.getInstance();
+  const mqttBridge = MqttBridgeService.getInstance(registry, () => syncGateway.getLinkedHomeId());
 
   console.log('====================================================');
   console.log('  🚀 Smarter Home Pi - Controller Server Online     ');
