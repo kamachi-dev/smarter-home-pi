@@ -1,7 +1,5 @@
-﻿fix(sync): support vercel api gateway and persist rooms cache to disk
+feat(tunnel): install cloudflared and add start-supabase-tunnel.sh helper
 
-- Removed artificial vercel.app block in SmarterHomeSync, SensorSyncHandler, and TelemetrySyncHandler so edge Pi controllers can reach cloud API routes.
-- Added persistent disk caching (data/rooms.cache.json) to survive restarts and remote network/database outages.
-- Enhanced middleware in smarter-home to allow /api/* routes and x-pi-token requests through without HTML login redirects.
-- Kept all source files strictly under 500 lines of code.
-- Passed full test suites across both smarter-home-pi and smarter-home.
+- Install official Cloudflare Tunnel (cloudflared ARM64 binary) on Raspberry Pi
+- Add scripts/start-supabase-tunnel.sh for one-command public HTTPS access without router port-forwarding
+- Update latest.commit.txt
