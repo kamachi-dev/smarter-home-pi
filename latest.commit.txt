@@ -1,7 +1,9 @@
-﻿fix(sync): support vercel api gateway and persist rooms cache to disk
+feat(camera): optimize live streaming pipeline and tiered motion face recognition
 
-- Removed artificial vercel.app block in SmarterHomeSync, SensorSyncHandler, and TelemetrySyncHandler so edge Pi controllers can reach cloud API routes.
-- Added persistent disk caching (data/rooms.cache.json) to survive restarts and remote network/database outages.
-- Enhanced middleware in smarter-home to allow /api/* routes and x-pi-token requests through without HTML login redirects.
-- Kept all source files strictly under 500 lines of code.
-- Passed full test suites across both smarter-home-pi and smarter-home.
+- Implemented hierarchical tiered camera processing: Tier 1 Motion Detection -> Tier 2 Face Detection -> Tier 3 Face Recognition.
+- Gated neural operations so face detection runs only when motion is actively detected, and facial recognition occurs only after a face is verified.
+- Added fast `detectFacesOnly` method to `FaceRecognitionEngine` to avoid heavy landmark/embedding extraction when unnecessary.
+- Extracted `FaceTrainer` into a modular helper to keep all camera source files strictly under 500 lines of code.
+- Optimized `CameraSyncHandler.sendLiveFrame` with single-slot drop-oldest mechanism ensuring only the latest fresh frame is streamed without backpressure.
+- Removed continuous high-frequency Base64 `home_states` database table upserts, streaming live frames over ephemeral Supabase Realtime Broadcast.
+- Reduced fallback polling in `smarter-home` dashboard `SecuritySystem.jsx` from 2s to 15s, removing database write lock contention and server load.

@@ -5,6 +5,7 @@ import '@tensorflow/tfjs-backend-wasm';
 import jpeg from 'jpeg-js';
 import { FaceDetectionPayload, EnrolledPerson } from '../../types/index.js';
 import { config } from '../../config/env.js';
+import { FaceTrainer } from './faceTrainer.js';
 
 // Load Face-API with Wasm backend
 // @ts-ignore
@@ -132,10 +133,6 @@ export class FaceRecognitionEngine {
     }
   }
 
-  /**
-   * Real AI Training: Takes 10+ actual photos, runs real face detection & landmark extraction on each photo,
-   * generates 128D ResNet descriptors, and computes an optimized composite embedding.
-   */
   public async trainPersonWithPhotos(
     name: string,
     photos: string[],
@@ -143,106 +140,104 @@ export class FaceRecognitionEngine {
     customId?: string
   ): Promise<EnrolledPerson> {
     await this.ensureInitialized();
-
-    if (photos.length < 10) {
-      throw new Error(`Facial recognition training requires at least 10 distinct photos (received ${photos.length}).`);
-    }
-
-    console.log(`[FaceRecognitionEngine] Training AI model for "${name}" using ${photos.length} real photos...`);
-
-    const validDescriptors: Float32Array[] = [];
-    const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
-
-    for (let i = 0; i < photos.length; i++) {
-      const tensor = this.bufferToTensor(photos[i]);
-      if (!tensor) continue;
-
-      try {
-        const detection = await faceapi.detectSingleFace(tensor, detectorOptions)
-          .withFaceLandmarks(true)
-          .withFaceDescriptor();
-
-        if (detection && detection.descriptor) {
-          validDescriptors.push(detection.descriptor);
-          console.log(`[FaceRecognitionEngine] Photo ${i + 1}/${photos.length}: Face extracted (confidence: ${(detection.detection.score * 100).toFixed(1)}%)`);
-        } else {
-          console.warn(`[FaceRecognitionEngine] Photo ${i + 1}/${photos.length}: No face detected in frame`);
-        }
-      } catch (err) {
-        console.warn(`[FaceRecognitionEngine] Error processing photo ${i + 1}:`, (err as Error).message);
-      } finally {
-        tensor.dispose();
-      }
-    }
-
-    if (validDescriptors.length === 0) {
-      throw new Error('Could not detect a clear human face in any of the uploaded photos. Please upload clearer photos.');
-    }
-
-    // Compute composite 128-dimensional mean centroid descriptor
-    const descriptorLen = 128;
-    const composite = new Float32Array(descriptorLen);
-
-    for (const desc of validDescriptors) {
-      for (let j = 0; j < descriptorLen; j++) {
-        composite[j] += desc[j] / validDescriptors.length;
-      }
-    }
-
-    // Preserve natural mean centroid embedding (raw FaceRecognitionNet scale ~1.427)
-    const normalizedDescriptor = Array.from(composite).map(v => Math.round(v * 10000) / 10000);
-
-    // Compute accuracy metric based on descriptor consistency to composite centroid & detection success rate
-    let totalDistance = 0;
-    for (const desc of validDescriptors) {
-      let dSum = 0;
-      for (let j = 0; j < descriptorLen; j++) {
-        const diff = desc[j] - normalizedDescriptor[j];
-        dSum += diff * diff;
-      }
-      totalDistance += Math.sqrt(dSum);
-    }
-
-    const avgDistance = totalDistance / validDescriptors.length;
-    // Map Euclidean distance to consistency (typical face match distance is 0.2 - 0.6)
-    // Lower distance = higher consistency
-    const consistencyScore = Math.max(0.5, Math.min(1.0, 1.0 - (avgDistance * 0.8)));
-    const faceCoverageRatio = validDescriptors.length / photos.length;
-    
-    // Overall accuracy percentage: weighted combination of face extraction yield and landmark vector consistency
-    const calculatedAccuracy = Math.round((consistencyScore * 0.65 + faceCoverageRatio * 0.35) * 1000) / 10;
-
-    const personId = customId || `face-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-    const randomPhotoIdx = Math.floor(Math.random() * photos.length);
-    const chosenPfp = photos[randomPhotoIdx];
-
-    const enrolledPerson: EnrolledPerson = {
-      id: personId,
-      name,
-      notes: notes || `Trained with ${validDescriptors.length}/${photos.length} verified face photos`,
-      enrolledAt: new Date().toISOString(),
-      descriptor: normalizedDescriptor,
-      imageUrl: chosenPfp?.startsWith('data:') ? chosenPfp : photos[0],
-      accuracy: calculatedAccuracy,
-      photoCount: photos.length,
-      trainingStats: {
-        validFaces: validDescriptors.length,
-        totalPhotos: photos.length,
-        avgConfidence: Math.round(faceCoverageRatio * 100),
-        consistencyScore: Math.round(consistencyScore * 100)
-      }
-    };
-
-    const existingIdx = this.enrolledPeople.findIndex(p => p.id === personId || p.name.toLowerCase() === name.toLowerCase());
+    const enrolledPerson = await FaceTrainer.trainPersonWithPhotos(name, photos, notes, customId);
+    const existingIdx = this.enrolledPeople.findIndex(p => p.id === enrolledPerson.id || p.name.toLowerCase() === name.toLowerCase());
     if (existingIdx >= 0) {
       this.enrolledPeople[existingIdx] = enrolledPerson;
     } else {
       this.enrolledPeople.push(enrolledPerson);
     }
-
     this.saveEnrolledPeople();
-    console.log(`[FaceRecognitionEngine] Successfully trained neural profile for "${name}" (Accuracy: ${calculatedAccuracy}%, Descriptors: ${validDescriptors.length})!`);
     return enrolledPerson;
+  }
+
+  /**
+   * Fast Face Detection only: Runs TinyFaceDetector without extracting 68 landmarks or 128D embeddings.
+   * Only executed when motion has been detected.
+   */
+  public async detectFacesOnly(imageBuffer?: Buffer): Promise<FaceDetectionPayload> {
+    const timestamp = new Date().toISOString();
+    await this.ensureInitialized();
+
+    if (!imageBuffer || imageBuffer.length === 0) {
+      return {
+        detected: false,
+        status: 'none',
+        person: null,
+        confidence: 0,
+        timestamp,
+        faces: []
+      };
+    }
+
+    const tensor = this.bufferToTensor(imageBuffer);
+    if (!tensor) {
+      return {
+        detected: false,
+        status: 'none',
+        person: null,
+        confidence: 0,
+        timestamp,
+        faces: []
+      };
+    }
+
+    try {
+      let detections: any = null;
+      for (const size of [320, 416]) {
+        try {
+          const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: size, scoreThreshold: 0.20 });
+          detections = await faceapi.detectAllFaces(tensor, opt);
+          if (detections && detections.length > 0) break;
+        } catch {}
+      }
+
+      if (!detections || detections.length === 0) {
+        return {
+          detected: false,
+          status: 'none',
+          person: null,
+          confidence: 0,
+          timestamp,
+          faces: []
+        };
+      }
+
+      const detectedFaces = detections.map((det: any) => ({
+        box: {
+          x: Math.round(det.box.x),
+          y: Math.round(det.box.y),
+          width: Math.round(det.box.width),
+          height: Math.round(det.box.height)
+        },
+        status: 'unknown' as const,
+        person: 'Unknown Person',
+        confidence: Math.round(det.score * 100) / 100
+      }));
+
+      const primary = detectedFaces[0];
+      return {
+        detected: true,
+        status: 'unknown',
+        person: null,
+        confidence: primary.confidence,
+        timestamp,
+        box: primary.box,
+        faces: detectedFaces
+      };
+    } catch (err) {
+      console.error('[FaceRecognitionEngine] Fast face detection error:', (err as Error).message);
+      return {
+        detected: false,
+        status: 'none',
+        person: null,
+        confidence: 0,
+        timestamp,
+        faces: []
+      };
+    } finally {
+      tensor.dispose();
+    }
   }
 
   /**

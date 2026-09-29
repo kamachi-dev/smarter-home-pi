@@ -11,8 +11,9 @@ export class CameraSyncHandler {
   private supabase: SupabaseClient | null;
   private getLinkedHomeId: () => Promise<string | null>;
   private lastLiveFramePush = 0;
-  private lastStateUpsert = 0;
   private lastBroadcastLog = 0;
+  private isPushing = false;
+  private pendingPush: { frameBuffer: Buffer; faceDetection?: FaceDetectionPayload; roomId?: string } | null = null;
 
   constructor(options: CameraSyncOptions) {
     this.supabase = options.supabase;
@@ -24,22 +25,57 @@ export class CameraSyncHandler {
   }
 
   /**
-   * Pushes live processed camera frame (with face recognition squares) to Smarter Home
+   * Pushes live processed camera frame (with face recognition squares) to Smarter Home.
+   * Ensures only the freshest/latest frame is streamed via ephemeral Supabase Realtime Broadcast.
+   * Eliminates continuous high-frequency Postgres table upserts to prevent database and server load.
    */
   public async sendLiveFrame(frameBuffer: Buffer, faceDetection?: FaceDetectionPayload, roomId?: string): Promise<boolean> {
     if (!config.smarterHomeToken) return false;
 
+    // Single-slot frame dropping: if a frame broadcast is currently in-flight,
+    // buffer only this newest frame and drop intermediate backlog frames.
+    if (this.isPushing) {
+      this.pendingPush = { frameBuffer, faceDetection, roomId };
+      return false;
+    }
+
     const now = Date.now();
-    if (now - this.lastLiveFramePush < 300) return false; // Stream at ~3.3 FPS
+    // Throttle to max ~5 FPS for optimal balance of smooth UI feedback and network bandwidth
+    if (now - this.lastLiveFramePush < 200) {
+      this.pendingPush = { frameBuffer, faceDetection, roomId };
+      return false;
+    }
+
+    this.isPushing = true;
     this.lastLiveFramePush = now;
 
+    try {
+      await this.executeBroadcastPush(frameBuffer, faceDetection, roomId);
+    } finally {
+      this.isPushing = false;
+      // If a newer frame arrived while broadcasting, immediately transmit the latest pending frame
+      if (this.pendingPush) {
+        const next = this.pendingPush;
+        this.pendingPush = null;
+        setImmediate(() => {
+          this.sendLiveFrame(next.frameBuffer, next.faceDetection, next.roomId).catch(() => {});
+        });
+      }
+    }
+
+    return true;
+  }
+
+  private async executeBroadcastPush(frameBuffer: Buffer, faceDetection?: FaceDetectionPayload, roomId?: string): Promise<void> {
     const base64Image = `data:image/jpeg;base64,${frameBuffer.toString('base64')}`;
     const isoTimestamp = new Date().toISOString();
+    const now = Date.now();
 
     if (this.supabase && config.supabaseUrl && config.supabaseKey) {
       try {
         const homeId = await this.getLinkedHomeId();
         if (homeId) {
+          // Stream directly over Supabase Realtime WebSocket broadcast (ephemeral transport; 0 DB writes)
           fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {
             method: 'POST',
             headers: {
@@ -58,36 +94,20 @@ export class CameraSyncHandler {
                   roomId: roomId || null
                 }
               }]
-            })
+            }),
+            signal: AbortSignal.timeout(1500)
           }).catch(() => {});
 
-          if (now - this.lastStateUpsert > 800) {
-            this.lastStateUpsert = now;
-            const feedKey = roomId ? `camera_feed_${roomId}` : 'camera_feed';
-            await this.supabase.from('home_states').upsert({
-              home_id: homeId,
-              key: feedKey,
-              value: {
-                image: base64Image,
-                faceDetection: faceDetection || null,
-                updatedAt: now,
-                timestamp: isoTimestamp,
-                roomId: roomId || null
-              },
-              updated_at: isoTimestamp
-            }, { onConflict: 'home_id,key' });
-          }
-
-          if (now - this.lastBroadcastLog > 8000) {
+          if (now - this.lastBroadcastLog > 10000) {
             this.lastBroadcastLog = now;
-            console.log(`[CameraSyncHandler] 📡 Broadcasting live camera frames to Supabase (home: ${homeId.substring(0, 8)}..., room: ${roomId || 'default'})`);
+            console.log(`[CameraSyncHandler] 📡 Real-time frame broadcast active (home: ${homeId.substring(0, 8)}..., room: ${roomId || 'default'})`);
           }
-
-          return true;
+          return;
         }
       } catch {}
     }
 
+    // Direct HTTP gateway fallback only if Supabase Realtime is unreachable
     if (config.smarterHomeApiUrl && !config.smarterHomeApiUrl.includes('vercel.app')) {
       try {
         const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/pi/camera/live`;
@@ -103,12 +123,10 @@ export class CameraSyncHandler {
             faceDetection: faceDetection || null,
             timestamp: isoTimestamp
           }),
-          signal: AbortSignal.timeout(2000)
+          signal: AbortSignal.timeout(1500)
         });
       } catch {}
     }
-
-    return true;
   }
 
   /**

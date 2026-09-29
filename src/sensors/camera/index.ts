@@ -26,6 +26,7 @@ export class CameraSensor extends BaseSensor {
   private captureStrategyIndex: number = 0;
   private motionDetector: EdgeMotionDetector;
   private latestMotion: MotionDetectionResult = { hasMotion: false, score: 0, changedPixels: 0, totalPixels: 0 };
+  private lastMotionTime: number = 0;
   
   private currentDetection: FaceDetectionPayload = {
     detected: false,
@@ -269,11 +270,12 @@ export class CameraSensor extends BaseSensor {
   private onNewCameraFrame(rawFrame: Buffer): void {
     this.latestRawFrame = rawFrame;
 
-    // Fast edge motion detection (~0.5ms on Pi) before any expensive operations
+    // 1. Tier 1: Fast edge motion detection (~0.5ms on Pi) before any expensive operations
     const motion = this.motionDetector.detectMotion(rawFrame);
     this.latestMotion = motion;
 
     if (motion.hasMotion) {
+      this.lastMotionTime = Date.now();
       this.emit('motion_detected', {
         sensorId: this.id,
         sensorName: this.config.name,
@@ -283,14 +285,26 @@ export class CameraSensor extends BaseSensor {
       });
     }
 
-    // Immediately display the latest frame using active face detection annotations
+    // 2. Trigger Tier 2/3 face processing ONLY when motion is active or within decay window
+    const isMotionActive = motion.hasMotion || (Date.now() - this.lastMotionTime < 3000);
+    if (isMotionActive && !this.isProcessingFace) {
+      this.processTieredFacePipelineAsync(rawFrame).catch(() => {});
+    } else if (!isMotionActive && this.currentDetection?.detected) {
+      // Clear detection when motion has subsided
+      this.currentDetection = {
+        detected: false,
+        status: 'none',
+        person: null,
+        confidence: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    // 3. Immediately display and broadcast the latest frame using active face annotations
     const annotated = this.currentDetection?.detected
       ? FrameAnnotator.annotateFrame(rawFrame, this.currentDetection)
       : rawFrame;
     this.broadcastFrame(annotated);
-
-    // Continuous edge face recognition is disabled to save RPi CPU load;
-    // Frame motion alerts are broadcast for cloud/Gemini on-demand verification.
   }
 
   private broadcastFrame(frame: Buffer): void {
@@ -304,35 +318,56 @@ export class CameraSensor extends BaseSensor {
     }
   }
 
-  private async processFaceRecognitionAsync(rawFrame: Buffer): Promise<void> {
+  /**
+   * Tiered Face Pipeline:
+   * Motion confirmed -> Tier 2 (Face Detection) -> If face present -> Tier 3 (Face Recognition)
+   */
+  private async processTieredFacePipelineAsync(rawFrame: Buffer): Promise<void> {
     this.isProcessingFace = true;
     try {
       if (!this.faceEngine) this.faceEngine = FaceRecognitionEngine.getInstance();
-      const detection = await this.faceEngine.recognizeFrame(rawFrame);
-      this.currentDetection = detection;
-      this.emit('face_detection', detection);
 
-      // Re-annotate and broadcast the current latest frame if a face is detected
-      if (this.latestRawFrame && detection.detected) {
-        const annotatedFrame = FrameAnnotator.annotateFrame(this.latestRawFrame, detection);
+      // Tier 2: Fast face detection (checks if any human face is in frame)
+      const fastDetection = await this.faceEngine.detectFacesOnly(rawFrame);
+
+      if (!fastDetection.detected || !fastDetection.faces || fastDetection.faces.length === 0) {
+        // No face found in motion frame; clear detection state
+        this.currentDetection = {
+          detected: false,
+          status: 'none',
+          person: null,
+          confidence: 0,
+          timestamp: new Date().toISOString()
+        };
+        return;
+      }
+
+      // Tier 3: Face detected! Now attempt face recognition (128D embeddings & FaceMatcher)
+      const recognitionResult = await this.faceEngine.recognizeFrame(rawFrame);
+      this.currentDetection = recognitionResult;
+      this.emit('face_detection', recognitionResult);
+
+      // Re-annotate and broadcast the current latest frame if faces were recognized
+      if (this.latestRawFrame && recognitionResult.detected) {
+        const annotatedFrame = FrameAnnotator.annotateFrame(this.latestRawFrame, recognitionResult);
         this.broadcastFrame(annotatedFrame);
       }
 
       // Evaluate PresenceTracker to capture FIRST FRAME of any newly recognized people
-      const newlyArrived = this.presenceTracker.processDetection(detection, rawFrame);
+      const newlyArrived = this.presenceTracker.processDetection(recognitionResult, rawFrame);
       for (const arrival of newlyArrived) {
         this.emit('person_arrival', arrival);
       }
     } catch (err) {
-      console.error('[CameraSensor] Face recognition error:', (err as Error).message);
+      console.error('[CameraSensor] Tiered face pipeline error:', (err as Error).message);
     } finally {
       this.isProcessingFace = false;
-      // If a newer frame arrived while calculating, immediately process the latest frame (skipping intermediate frames)
-      if (this.latestRawFrame && this.latestRawFrame !== rawFrame) {
+      // If a newer frame arrived while running inference, drop intermediate frames and process only the newest frame
+      if (this.latestRawFrame && this.latestRawFrame !== rawFrame && (Date.now() - this.lastMotionTime < 3000)) {
         const next = this.latestRawFrame;
         setImmediate(() => {
           if (this.isRunning && !this.isProcessingFace) {
-            this.processFaceRecognitionAsync(next);
+            this.processTieredFacePipelineAsync(next).catch(() => {});
           }
         });
       }
@@ -359,20 +394,6 @@ export class CameraSensor extends BaseSensor {
     }
 
     return { detection, annotatedFrame };
-  }
-
-  /**
-   * Continuous background AI facial recognition loop analyzing real camera frames
-   */
-  private startFaceRecognitionPipeline(): void {
-    if (this.recognitionTimer) return;
-
-    this.recognitionTimer = setInterval(async () => {
-      if (!this.isRunning || this.isProcessingFace || !this.latestFrame) return;
-      if (this.latestMotion.hasMotion || this.currentDetection?.detected) {
-        await this.processFaceRecognitionAsync(this.latestFrame);
-      }
-    }, 1000);
   }
 
   public getLatestFrame(): Buffer | null {
