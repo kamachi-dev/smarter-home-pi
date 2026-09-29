@@ -163,8 +163,10 @@ export class SmarterHomeSync {
         .channel('pi-lighting-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'home_states' }, (payload) => {
           const record = payload.new as any;
-          if (record && record.key === 'lights') {
+          if (record?.key === 'lights') {
             this.lightingSync.handleStateUpdate(record.key, record.value);
+          } else if (record?.key === 'room_controllers') {
+            this.syncRoomsFromSupabase().catch(() => {});
           }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'lighting_states' }, (payload) => {
@@ -333,56 +335,9 @@ export class SmarterHomeSync {
   }
 
   public async getRooms(): Promise<any[]> {
-    if (this.supabase) {
-      try {
-        const homeId = await this.getLinkedHomeId();
-        let query = this.supabase.from('rooms').select('*');
-        if (homeId) {
-          query = query.eq('home_id', homeId);
-        }
-        const { data, error } = await query;
-        if (!error && data && Array.isArray(data) && data.length > 0) {
-          this.cachedRooms = data.map(room => {
-            const isRpi = room.camera_ip === 'rpi-camera' || room.camera_type === 'rpi' || (room.camera_stream_url && room.camera_stream_url.startsWith('rpicam'));
-            const isTapo = !isRpi && (room.camera_enabled || Boolean(room.camera_ip));
-            return {
-              ...room,
-              camera_type: isRpi ? 'rpi' : (isTapo ? 'tapo' : 'none')
-            };
-          });
-          return this.cachedRooms;
-        }
-      } catch (err) {
-        console.warn('[SmarterHomeSync] Failed to query Supabase rooms:', (err as Error).message);
-      }
+    if (this.cachedRooms.length === 0) {
+      await this.syncRoomsFromSupabase();
     }
-
-    if (this.cachedRooms && this.cachedRooms.length > 0) {
-      return this.cachedRooms;
-    }
-
-    if (config.smarterHomeApiUrl && config.smarterHomeToken && Boolean(config.smarterHomeApiUrl)) {
-      try {
-        const targetUrl = `${config.smarterHomeApiUrl.replace(/\/$/, '')}/api/rooms`;
-        const res = await fetch(targetUrl, {
-          headers: {
-            'x-pi-token': config.smarterHomeToken,
-            'x-pi-api-key': config.smarterHomeApiKey
-          },
-          signal: AbortSignal.timeout(5000)
-        });
-        if (res.ok) {
-          const data = (await res.json()) as any;
-          if (data && Array.isArray(data.rooms) && data.rooms.length > 0) {
-            this.cachedRooms = data.rooms;
-            return this.cachedRooms;
-          }
-        }
-      } catch (err) {
-        console.warn('[SmarterHomeSync] Smarter-Home server /api/rooms HTTP fetch warning:', (err as Error).message);
-      }
-    }
-
     return this.cachedRooms;
   }
 

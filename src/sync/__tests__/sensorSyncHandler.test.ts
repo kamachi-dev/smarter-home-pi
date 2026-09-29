@@ -306,4 +306,40 @@ describe('SensorSyncHandler & Supabase GPIO Mapping Tests', () => {
     assert.strictEqual(switchedToNone.camera_stream_url, null);
     assert.strictEqual(switchedToNone.camera_type, 'none');
   });
+
+  test('should support setting which controller certain lights and sensors connect to', async () => {
+    // Add room with some sensors on main hub and some on sub-controller
+    sampleRooms.push({
+      id: 'room-balcony',
+      name: 'Balcony',
+      light_gpio: 23,
+      temp_gpio: 24,
+      ac_gpio: 25,
+      light_controller: 'sub-node-01', // On sub-controller
+      temp_controller: 'main',        // On main hub
+      ac_controller: 'sub-node-01'   // On sub-controller
+    });
+
+    const handler = new SensorSyncHandler({
+      supabase: mockSupabase as any,
+      registry: mockRegistry,
+      getLinkedHomeId: async () => 'test-home-id'
+    });
+
+    const result = await handler.syncSensorsFromSupabase();
+
+    // Check light sensor for balcony: present in mappings with controller 'sub-node-01'
+    const balconyLight = result.supabaseSensors.find(s => s.roomId === 'room-balcony' && s.property === 'light_gpio');
+    assert.ok(balconyLight);
+    assert.strictEqual(balconyLight?.controller, 'sub-node-01');
+
+    // Because it is assigned to sub-node-01, it must NOT be registered on the Main Pi header
+    assert.strictEqual(registeredSensors.has('sensor-relay-23'), false);
+
+    // Temperature sensor on balcony is assigned to 'main', so it MUST be registered on the Main Pi header
+    const balconyTemp = result.supabaseSensors.find(s => s.roomId === 'room-balcony' && s.property === 'temp_gpio');
+    assert.ok(balconyTemp);
+    assert.strictEqual(balconyTemp?.controller, 'main');
+    assert.strictEqual(registeredSensors.has('sensor-temp-24'), true);
+  });
 });

@@ -3,6 +3,7 @@ import { SensorRegistry } from '../sensors/registry.js';
 import { SupabaseSensorMapping, RPiPin, SensorConfig } from '../types/index.js';
 import { getPinByBcmGpio } from '../hardware/pinout.js';
 import { config } from '../config/env.js';
+import { RoomCrudService } from './roomCrudService.js';
 
 export interface SensorSyncOptions {
   supabase: SupabaseClient | null;
@@ -14,6 +15,7 @@ export class SensorSyncHandler {
   private supabase: SupabaseClient | null;
   private registry: SensorRegistry;
   private getLinkedHomeId: () => Promise<string | null>;
+  private roomCrud: RoomCrudService;
   private lastSyncedSensors: SupabaseSensorMapping[] = [];
   private lastSyncTime: string | null = null;
   private lastSyncSuccess: boolean = false;
@@ -22,6 +24,12 @@ export class SensorSyncHandler {
     this.supabase = options.supabase;
     this.registry = options.registry;
     this.getLinkedHomeId = options.getLinkedHomeId;
+    this.roomCrud = new RoomCrudService({
+      getSupabase: () => this.supabase,
+      getLinkedHomeId: this.getLinkedHomeId,
+      registry: this.registry,
+      onRoomsChanged: () => this.syncSensorsFromSupabase()
+    });
   }
 
   public updateSupabaseClient(client: SupabaseClient | null) {
@@ -97,10 +105,27 @@ export class SensorSyncHandler {
     this.lastSyncSuccess = connected;
     this.lastSyncTime = new Date().toISOString();
 
+    let ctrlMap: Record<string, any> = {};
+    if (this.supabase) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        let q = this.supabase.from('home_states').select('value').eq('key', 'room_controllers');
+        if (homeId) q = q.eq('home_id', homeId);
+        const { data: ctrlData } = await q.maybeSingle();
+        if (ctrlData?.value && typeof ctrlData.value === 'object') ctrlMap = ctrlData.value;
+      } catch (_) {}
+    }
+
+    const isLocalPi = (c?: string) => !c || ['main', 'hub', 'rpi'].includes(c.toLowerCase());
     const discoveredMappings: SupabaseSensorMapping[] = [];
     const activeSensorIds = new Set<string>();
 
     for (const room of rooms) {
+      const roomCtrl = ctrlMap[room.id] || {};
+      const lightCtrl = room.light_controller || roomCtrl.light_controller || 'main';
+      const tempCtrl = room.temp_controller || roomCtrl.temp_controller || 'main';
+      const acCtrl = room.ac_controller || roomCtrl.ac_controller || 'main';
+
       // A. Room Light Relay (light_gpio)
       if (room.light_gpio !== null && room.light_gpio !== undefined && room.light_gpio !== '') {
         const bcmGpio = parseInt(String(room.light_gpio), 10);
@@ -108,7 +133,8 @@ export class SensorSyncHandler {
           const pin = getPinByBcmGpio(bcmGpio);
           if (pin) {
             const sensorId = `sensor-relay-${bcmGpio}`;
-            activeSensorIds.add(sensorId);
+            const local = isLocalPi(lightCtrl);
+            if (local) activeSensorIds.add(sensorId);
 
             discoveredMappings.push({
               id: sensorId,
@@ -120,28 +146,24 @@ export class SensorSyncHandler {
               roomId: room.id,
               roomName: room.name,
               property: 'light_gpio',
+              controller: lightCtrl,
               state: { power: Boolean(room.lights_power), brightness: room.lights_brightness ?? 100 },
               status: 'active',
               lastUpdated: room.updated_at || room.created_at
             });
 
-            // Ensure registered in registry
-            await this.ensureRegistered({
-              id: sensorId,
-              name: `${room.name} 12V Light Relay (GPIO ${bcmGpio})`,
-              type: 'relay',
-              pinNumber: pin.pinNumber,
-              bcmGpio,
-              pollIntervalMs: 0,
-              enabled: true,
-              options: {
-                activeLow: true,
-                roomId: room.id,
-                roomName: room.name,
-                source: 'supabase',
-                initialPower: Boolean(room.lights_power)
-              }
-            });
+            if (local) {
+              await this.ensureRegistered({
+                id: sensorId,
+                name: `${room.name} 12V Light Relay (GPIO ${bcmGpio})`,
+                type: 'relay',
+                pinNumber: pin.pinNumber,
+                bcmGpio,
+                pollIntervalMs: 0,
+                enabled: true,
+                options: { activeLow: true, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.lights_power) }
+              });
+            }
           }
         }
       }
@@ -153,7 +175,8 @@ export class SensorSyncHandler {
           const pin = getPinByBcmGpio(bcmGpio);
           if (pin) {
             const sensorId = `sensor-temp-${bcmGpio}`;
-            activeSensorIds.add(sensorId);
+            const local = isLocalPi(tempCtrl);
+            if (local) activeSensorIds.add(sensorId);
 
             discoveredMappings.push({
               id: sensorId,
@@ -165,26 +188,24 @@ export class SensorSyncHandler {
               roomId: room.id,
               roomName: room.name,
               property: 'temp_gpio',
+              controller: tempCtrl,
               state: { temperature: room.temperature, humidity: room.humidity },
               status: 'active',
               lastUpdated: room.updated_at || room.created_at
             });
 
-            await this.ensureRegistered({
-              id: sensorId,
-              name: `${room.name} Temperature & Humidity (GPIO ${bcmGpio})`,
-              type: 'temperature',
-              pinNumber: pin.pinNumber,
-              bcmGpio,
-              pollIntervalMs: 2500,
-              enabled: true,
-              options: {
-                model: 'DHT22',
-                roomId: room.id,
-                roomName: room.name,
-                source: 'supabase'
-              }
-            });
+            if (local) {
+              await this.ensureRegistered({
+                id: sensorId,
+                name: `${room.name} Temperature & Humidity (GPIO ${bcmGpio})`,
+                type: 'temperature',
+                pinNumber: pin.pinNumber,
+                bcmGpio,
+                pollIntervalMs: 2500,
+                enabled: true,
+                options: { model: 'DHT22', roomId: room.id, roomName: room.name, source: 'supabase' }
+              });
+            }
           }
         }
       }
@@ -196,7 +217,8 @@ export class SensorSyncHandler {
           const pin = getPinByBcmGpio(bcmGpio);
           if (pin) {
             const sensorId = `sensor-ac-relay-${bcmGpio}`;
-            activeSensorIds.add(sensorId);
+            const local = isLocalPi(acCtrl);
+            if (local) activeSensorIds.add(sensorId);
 
             discoveredMappings.push({
               id: sensorId,
@@ -208,28 +230,24 @@ export class SensorSyncHandler {
               roomId: room.id,
               roomName: room.name,
               property: 'ac_gpio',
+              controller: acCtrl,
               state: { power: Boolean(room.ac_power) },
               status: 'active',
               lastUpdated: room.updated_at || room.created_at
             });
 
-            await this.ensureRegistered({
-              id: sensorId,
-              name: `${room.name} AC Power Relay (GPIO ${bcmGpio})`,
-              type: 'relay',
-              pinNumber: pin.pinNumber,
-              bcmGpio,
-              pollIntervalMs: 0,
-              enabled: true,
-              options: {
-                activeLow: true,
-                isAcRelay: true,
-                roomId: room.id,
-                roomName: room.name,
-                source: 'supabase',
-                initialPower: Boolean(room.ac_power)
-              }
-            });
+            if (local) {
+              await this.ensureRegistered({
+                id: sensorId,
+                name: `${room.name} AC Power Relay (GPIO ${bcmGpio})`,
+                type: 'relay',
+                pinNumber: pin.pinNumber,
+                bcmGpio,
+                pollIntervalMs: 0,
+                enabled: true,
+                options: { activeLow: true, isAcRelay: true, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.ac_power) }
+              });
+            }
           }
         }
       }
@@ -257,61 +275,86 @@ export class SensorSyncHandler {
     }
   }
 
-  /**
-   * Assign or reassign a room's hardware sensor to a specific GPIO pin in Supabase
-   */
   public async assignRoomSensor(
     roomId: string,
     property: 'light_gpio' | 'temp_gpio' | 'ac_gpio',
-    bcmGpio: number | null
+    bcmGpio: number | null,
+    controller?: string
   ): Promise<boolean> {
-    if (!this.supabase) {
-      throw new Error('Supabase client is not connected.');
-    }
+    if (!this.supabase) throw new Error('Supabase client is not connected.');
 
     const { error } = await this.supabase
       .from('rooms')
       .update({ [property]: bcmGpio, updated_at: new Date().toISOString() })
       .eq('id', roomId);
 
-    if (error) {
-      throw new Error(`Failed to update Supabase room ${roomId}: ${error.message}`);
+    if (error) throw new Error(`Failed to update Supabase room ${roomId}: ${error.message}`);
+
+    if (controller) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        let q = this.supabase.from('home_states').select('value').eq('key', 'room_controllers');
+        if (homeId) q = q.eq('home_id', homeId);
+        const { data: ctrlData } = await q.maybeSingle();
+        const currentMap = ctrlData?.value && typeof ctrlData.value === 'object' ? ctrlData.value : {};
+        const ctrlProp = property === 'light_gpio' ? 'light_controller' : (property === 'temp_gpio' ? 'temp_controller' : 'ac_controller');
+        await this.supabase.from('home_states').upsert({
+          home_id: homeId,
+          key: 'room_controllers',
+          value: { ...currentMap, [roomId]: { ...(currentMap[roomId] || {}), [ctrlProp]: controller } },
+          updated_at: new Date().toISOString()
+        }, { onConflict: homeId ? 'home_id,key' : 'user_id,key' });
+      } catch (_) {}
     }
 
-    // Immediately re-sync sensors to update hardware daemon and dashboard
     await this.syncSensorsFromSupabase();
     return true;
   }
 
-  /**
-   * Batch configure a room's hardware GPIO pin connections in Supabase
-   */
   public async configureRoomSensors(
     roomId: string,
     assignments: {
       light_gpio?: number | null;
       temp_gpio?: number | null;
       ac_gpio?: number | null;
+      light_controller?: string;
+      temp_controller?: string;
+      ac_controller?: string;
     }
   ): Promise<boolean> {
-    if (!this.supabase) {
-      throw new Error('Supabase client is not connected.');
-    }
+    if (!this.supabase) throw new Error('Supabase client is not connected.');
 
-    const updates: Record<string, any> = {
-      updated_at: new Date().toISOString()
-    };
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     if (assignments.light_gpio !== undefined) updates.light_gpio = assignments.light_gpio;
     if (assignments.temp_gpio !== undefined) updates.temp_gpio = assignments.temp_gpio;
     if (assignments.ac_gpio !== undefined) updates.ac_gpio = assignments.ac_gpio;
 
-    const { error } = await this.supabase
-      .from('rooms')
-      .update(updates)
-      .eq('id', roomId);
+    const { error } = await this.supabase.from('rooms').update(updates).eq('id', roomId);
+    if (error) throw new Error(`Failed to configure Supabase room ${roomId}: ${error.message}`);
 
-    if (error) {
-      throw new Error(`Failed to configure Supabase room ${roomId}: ${error.message}`);
+    const hasCtrl = assignments.light_controller !== undefined || assignments.temp_controller !== undefined || assignments.ac_controller !== undefined;
+    if (hasCtrl) {
+      try {
+        const homeId = await this.getLinkedHomeId();
+        let q = this.supabase.from('home_states').select('value').eq('key', 'room_controllers');
+        if (homeId) q = q.eq('home_id', homeId);
+        const { data: ctrlData } = await q.maybeSingle();
+        const currentMap = ctrlData?.value && typeof ctrlData.value === 'object' ? ctrlData.value : {};
+        await this.supabase.from('home_states').upsert({
+          home_id: homeId,
+          key: 'room_controllers',
+          value: {
+            ...currentMap,
+            [roomId]: {
+              ...(currentMap[roomId] || {}),
+              ...(assignments.light_controller ? { light_controller: assignments.light_controller } : {}),
+              ...(assignments.temp_controller ? { temp_controller: assignments.temp_controller } : {}),
+              ...(assignments.ac_controller ? { ac_controller: assignments.ac_controller } : {})
+            }
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: homeId ? 'home_id,key' : 'user_id,key' });
+      } catch (_) {}
     }
 
     await this.syncSensorsFromSupabase();
@@ -337,143 +380,15 @@ export class SensorSyncHandler {
     }
   }
 
-  /**
-   * Create a new room in Supabase and optionally initialize its sensors
-   */
-  public async createRoom(roomData: {
-    name: string;
-    description?: string;
-    icon?: string;
-    image_url?: string;
-    camera_type?: 'tapo' | 'rpi' | 'none';
-    camera_ip?: string | null;
-    camera_username?: string | null;
-    camera_password?: string | null;
-    camera_stream_url?: string | null;
-    camera_enabled?: boolean;
-    light_gpio?: number | null;
-    temp_gpio?: number | null;
-    ac_gpio?: number | null;
-  }): Promise<any> {
-    if (!this.supabase) throw new Error('Supabase client is not connected.');
-
-    const homeId = await this.getLinkedHomeId();
-    let userId: string | null = null;
-    const { data: userData } = await this.supabase.auth.getUser();
-    if (userData?.user?.id) {
-      userId = userData.user.id;
-    } else {
-      const { data: existing } = await this.supabase.from('rooms').select('user_id').limit(1).single();
-      userId = existing?.user_id || null;
-    }
-
-    const isRpi = roomData.camera_type === 'rpi' || roomData.camera_ip === 'rpi-camera';
-    const isNone = roomData.camera_type === 'none';
-
-    const newRecord: Record<string, any> = {
-      name: roomData.name,
-      description: roomData.description || '',
-      icon: roomData.icon || 'Home',
-      image_url: roomData.image_url || '/images/rooms/living-room.jpg',
-      home_id: homeId,
-      user_id: userId,
-      camera_ip: isRpi ? 'rpi-camera' : (isNone ? null : (roomData.camera_ip || null)),
-      camera_username: isRpi || isNone ? null : (roomData.camera_username || null),
-      camera_password: isRpi || isNone ? null : (roomData.camera_password || null),
-      camera_stream_url: isRpi ? 'rpicam://0' : (isNone ? null : (roomData.camera_stream_url || null)),
-      camera_enabled: isNone ? false : (isRpi ? true : Boolean(roomData.camera_enabled || roomData.camera_ip)),
-      light_gpio: roomData.light_gpio !== undefined ? roomData.light_gpio : null,
-      temp_gpio: roomData.temp_gpio !== undefined ? roomData.temp_gpio : null,
-      ac_gpio: roomData.ac_gpio !== undefined ? roomData.ac_gpio : null,
-      temperature: null,
-      humidity: null,
-      lights_power: false,
-      ac_power: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    const { data, error } = await this.supabase.from('rooms').insert(newRecord).select().single();
-    if (error) {
-      throw new Error(`Failed to create room in Supabase: ${error.message}`);
-    }
-
-    await this.syncSensorsFromSupabase();
-    if (data) {
-      data.camera_type = isRpi ? 'rpi' : (isNone ? 'none' : (data.camera_ip ? 'tapo' : 'none'));
-    }
-    return data;
+  public async createRoom(roomData: any): Promise<any> {
+    return this.roomCrud.createRoom(roomData);
   }
 
-  /**
-   * Update an existing room's metadata and GPIO configurations in Supabase
-   */
   public async updateRoom(roomId: string, updates: Record<string, any>): Promise<any> {
-    if (!this.supabase) throw new Error('Supabase client is not connected.');
-
-    const payload: Record<string, any> = {
-      ...updates,
-      updated_at: new Date().toISOString()
-    };
-    delete payload.id;
-    delete payload.created_at;
-
-    if (payload.camera_type === 'rpi') {
-      payload.camera_enabled = true;
-      payload.camera_ip = 'rpi-camera';
-      payload.camera_username = null;
-      payload.camera_password = null;
-      payload.camera_stream_url = payload.camera_stream_url || 'rpicam://0';
-    } else if (payload.camera_type === 'none') {
-      payload.camera_enabled = false;
-      payload.camera_ip = null;
-      payload.camera_username = null;
-      payload.camera_password = null;
-      payload.camera_stream_url = null;
-    } else if (payload.camera_type === 'tapo') {
-      payload.camera_enabled = Boolean(payload.camera_ip);
-    }
-    delete payload.camera_type;
-
-    const { data, error } = await this.supabase.from('rooms').update(payload).eq('id', roomId).select().single();
-    if (error) {
-      throw new Error(`Failed to update room ${roomId} in Supabase: ${error.message}`);
-    }
-
-    await this.syncSensorsFromSupabase();
-    if (data) {
-      data.camera_type = data.camera_ip === 'rpi-camera' || data.camera_stream_url?.startsWith('rpicam') ? 'rpi' : (data.camera_ip ? 'tapo' : 'none');
-    }
-    return data;
+    return this.roomCrud.updateRoom(roomId, updates);
   }
 
-  /**
-   * Delete a room from Supabase and release any attached hardware GPIO sensors
-   */
   public async deleteRoom(roomId: string): Promise<boolean> {
-    if (!this.supabase) throw new Error('Supabase client is not connected.');
-
-    // 1. Find room to release associated GPIO sensors from registry
-    const { data: room } = await this.supabase.from('rooms').select('*').eq('id', roomId).single();
-    if (room) {
-      if (room.light_gpio !== null && room.light_gpio !== undefined) {
-        await this.registry.unregisterSensor(`sensor-relay-${room.light_gpio}`, false);
-      }
-      if (room.temp_gpio !== null && room.temp_gpio !== undefined) {
-        await this.registry.unregisterSensor(`sensor-temp-${room.temp_gpio}`, false);
-      }
-      if (room.ac_gpio !== null && room.ac_gpio !== undefined) {
-        await this.registry.unregisterSensor(`sensor-ac-${room.ac_gpio}`, false);
-      }
-    }
-
-    // 2. Delete room from Supabase
-    const { error } = await this.supabase.from('rooms').delete().eq('id', roomId);
-    if (error) {
-      throw new Error(`Failed to delete room ${roomId} from Supabase: ${error.message}`);
-    }
-
-    await this.syncSensorsFromSupabase();
-    return true;
+    return this.roomCrud.deleteRoom(roomId);
   }
 }

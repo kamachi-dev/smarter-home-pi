@@ -12,6 +12,7 @@ export interface AssignedSensorSummary {
   roomId?: string;
   state?: any;
   reading?: any;
+  controller?: string;
   source: 'supabase' | 'local';
 }
 
@@ -25,6 +26,7 @@ export interface SupabaseSensorMapping {
   roomId: string;
   roomName: string;
   property: 'light_gpio' | 'temp_gpio' | 'ac_gpio' | string;
+  controller?: string;
   state?: any;
   reading?: any;
   status: 'active' | 'simulated' | 'offline';

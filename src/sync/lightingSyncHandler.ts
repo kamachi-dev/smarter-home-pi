@@ -3,6 +3,8 @@ import { SensorRegistry } from '../sensors/registry.js';
 import { RelaySensor } from '../sensors/relay/index.js';
 import { SensorConfig } from '../types/index.js';
 import { getPinByBcmGpio } from '../hardware/pinout.js';
+import { MqttBridgeService } from './mqttBridge.js';
+import { config } from '../config/env.js';
 
 export interface LightingSyncOptions {
   supabase: SupabaseClient | null;
@@ -15,6 +17,7 @@ export class LightingSyncHandler {
   private registry: SensorRegistry;
   private getLinkedHomeId: () => Promise<string | null>;
   private activeRelayMap: Map<number, RelaySensor> = new Map(); // bcmGpio -> RelaySensor
+  private roomControllerMap: Map<string, { controller: string; bcmGpio: number | null }> = new Map();
 
   constructor(options: LightingSyncOptions) {
     this.supabase = options.supabase;
@@ -48,7 +51,21 @@ export class LightingSyncHandler {
         ? parseInt(String(room.light_gpio), 10)
         : null;
 
+      const controller = (room.light_controller || 'main').toLowerCase();
+      if (room.id) {
+        this.roomControllerMap.set(room.id, { controller, bcmGpio });
+      }
+      if (room.name) {
+        const norm = room.name.toLowerCase().replace(/[\s_-]/g, '');
+        this.roomControllerMap.set(norm, { controller, bcmGpio });
+      }
+
       if (bcmGpio === null || isNaN(bcmGpio)) continue;
+
+      // If assigned to a sub-controller, do not claim/bind on local Pi hardware
+      if (controller && !['main', 'hub', 'rpi'].includes(controller)) {
+        continue;
+      }
 
       const sensorId = `sensor-relay-${bcmGpio}`;
       let relay = this.registry.getSensor(sensorId) as RelaySensor | undefined;
@@ -96,6 +113,22 @@ export class LightingSyncHandler {
       ? parseInt(String(room.light_gpio), 10)
       : null;
 
+    const controller = (room.light_controller || 'main').toLowerCase();
+
+    // If assigned to a sub-controller, forward command over MQTT
+    if (controller && !['main', 'hub', 'rpi'].includes(controller)) {
+      if (config.smarterHomeToken && typeof room.lights_power === 'boolean') {
+        MqttBridgeService.getInstance().publishSubCommand(config.smarterHomeToken, controller, {
+          action: 'set_power',
+          property: 'light_gpio',
+          roomId: room.id,
+          pin: bcmGpio,
+          power: room.lights_power
+        });
+      }
+      return;
+    }
+
     if (bcmGpio !== null && !isNaN(bcmGpio)) {
       const relay = this.getRelayByGpio(bcmGpio);
       if (relay && typeof room.lights_power === 'boolean') {
@@ -136,6 +169,22 @@ export class LightingSyncHandler {
     source: 'realtime_supabase' | 'local_api' | 'manual' = 'realtime_supabase'
   ): boolean {
     const normalized = roomIdentifier.toLowerCase().replace(/[\s_-]/g, '');
+
+    // Check if room is mapped to a sub-controller
+    const mapped = this.roomControllerMap.get(roomIdentifier) || this.roomControllerMap.get(normalized);
+    if (mapped && mapped.controller && !['main', 'hub', 'rpi'].includes(mapped.controller)) {
+      if (config.smarterHomeToken) {
+        MqttBridgeService.getInstance().publishSubCommand(config.smarterHomeToken, mapped.controller, {
+          action: 'set_power',
+          property: 'light_gpio',
+          roomId: roomIdentifier,
+          pin: mapped.bcmGpio,
+          power
+        });
+        return true;
+      }
+    }
+
     let found = false;
 
     for (const sensor of this.registry.getAllSensors()) {

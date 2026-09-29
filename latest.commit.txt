@@ -1,9 +1,9 @@
-feat(camera): optimize live streaming pipeline and tiered motion face recognition
+feat(hardware): support controller-specific sensor and lighting GPIO assignment
 
-- Implemented hierarchical tiered camera processing: Tier 1 Motion Detection -> Tier 2 Face Detection -> Tier 3 Face Recognition.
-- Gated neural operations so face detection runs only when motion is actively detected, and facial recognition occurs only after a face is verified.
-- Added fast `detectFacesOnly` method to `FaceRecognitionEngine` to avoid heavy landmark/embedding extraction when unnecessary.
-- Extracted `FaceTrainer` into a modular helper to keep all camera source files strictly under 500 lines of code.
-- Optimized `CameraSyncHandler.sendLiveFrame` with single-slot drop-oldest mechanism ensuring only the latest fresh frame is streamed without backpressure.
-- Removed continuous high-frequency Base64 `home_states` database table upserts, streaming live frames over ephemeral Supabase Realtime Broadcast.
-- Reduced fallback polling in `smarter-home` dashboard `SecuritySystem.jsx` from 2s to 15s, removing database write lock contention and server load.
+- Added controller selection support across room sensors and lights: Main Pi Hub vs Sub-Controller.
+- Updated `src/types/index.ts` with `controller?: string` on `SupabaseSensorMapping` and `AssignedSensorSummary`.
+- Modularized room database operations into `src/sync/roomCrudService.ts` maintaining strict <500 LOC compliance.
+- Updated `SensorSyncHandler` to bind local GPIO pins only when assigned to the Main Pi Hub (`main`/`hub`/`rpi`), while retaining sub-controller sensors in mapping state.
+- Updated `LightingSyncHandler` and `AcSyncHandler` to dispatch actuation commands over MQTT to sub-controllers via `MqttBridge.publishSubCommand` when mapped to secondary nodes.
+- Preserved Supabase existing state flow for lights while streaming sensors over MQTT.
+- Added comprehensive unit tests in `src/sync/__tests__/sensorSyncHandler.test.ts`.

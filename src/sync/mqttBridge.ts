@@ -135,6 +135,22 @@ export class MqttBridgeService {
     this.status.lastBroadcastTime = new Date().toISOString();
   }
 
+  /**
+   * Forward hardware actuation command (lights, relays) to a sub-controller
+   */
+  public publishSubCommand(homeToken: string, deviceId: string, command: any): void {
+    if (!this.client || !this.status.connected || !homeToken || !deviceId) return;
+
+    const topic = `smarterhome/${homeToken}/commands/${deviceId}`;
+    const outbound = JSON.stringify({
+      deviceId,
+      timestamp: new Date().toISOString(),
+      ...command,
+    });
+
+    this.client.publish(topic, outbound, { qos: 1 });
+  }
+
   public getStatus(): MqttBridgeStatus {
     return { ...this.status };
   }
