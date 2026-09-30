@@ -203,13 +203,13 @@ export class CameraSyncHandler {
               if (urlData?.publicUrl) {
                 snapshotUrl = urlData.publicUrl;
                 detectedPersonRecord.firstFrameImage = snapshotUrl;
-                console.log(`[CameraSyncHandler] 🗂️ Snapshot uploaded to Storage: ${snapshotPath}`);
+                console.log(`[CameraSyncHandler] 🗂�E�ESnapshot uploaded to Storage: ${snapshotPath}`);
               }
             } else {
-              console.warn('[CameraSyncHandler] ⚠️ Snapshot upload failed, falling back to base64:', uploadErr.message);
+              console.warn('[CameraSyncHandler] ⚠�E�ESnapshot upload failed, falling back to base64:', uploadErr.message);
             }
           } catch (uploadEx) {
-            console.warn('[CameraSyncHandler] ⚠️ Snapshot upload exception, falling back to base64:', (uploadEx as Error).message);
+            console.warn('[CameraSyncHandler] ⚠�E�ESnapshot upload exception, falling back to base64:', (uploadEx as Error).message);
           }
 
           // Append to Security Logs with snapshot URL
@@ -255,7 +255,7 @@ export class CameraSyncHandler {
           ], { onConflict: 'home_id,key' });
 
           if (upsertErr) {
-            console.error('[CameraSyncHandler] ❌ Supabase home_states upsert error:', upsertErr.message);
+            console.error('[CameraSyncHandler] ❁ESupabase home_states upsert error:', upsertErr.message);
             // Try single row upsert fallback
             try {
               await this.supabase.from('home_states').upsert({
@@ -268,7 +268,7 @@ export class CameraSyncHandler {
               console.error('[CameraSyncHandler] Single row upsert fallback failed:', (e as Error).message);
             }
           } else {
-            console.log(`[CameraSyncHandler] ✅ Saved intruder/arrival log into home_states (home: ${homeId.substring(0, 8)}...)`);
+            console.log(`[CameraSyncHandler] ✁ESaved intruder/arrival log into home_states (home: ${homeId.substring(0, 8)}...)`);
           }
 
           await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/realtime/v1/api/broadcast`, {

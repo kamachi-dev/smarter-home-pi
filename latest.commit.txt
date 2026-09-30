@@ -1,9 +1,5 @@
-feat(hardware): support controller-specific sensor and lighting GPIO assignment
+feat(camera): enforce strict facial detection thresholds and red intruder alerts
 
-- Added controller selection support across room sensors and lights: Main Pi Hub vs Sub-Controller.
-- Updated `src/types/index.ts` with `controller?: string` on `SupabaseSensorMapping` and `AssignedSensorSummary`.
-- Modularized room database operations into `src/sync/roomCrudService.ts` maintaining strict <500 LOC compliance.
-- Updated `SensorSyncHandler` to bind local GPIO pins only when assigned to the Main Pi Hub (`main`/`hub`/`rpi`), while retaining sub-controller sensors in mapping state.
-- Updated `LightingSyncHandler` and `AcSyncHandler` to dispatch actuation commands over MQTT to sub-controllers via `MqttBridge.publishSubCommand` when mapped to secondary nodes.
-- Preserved Supabase existing state flow for lights while streaming sensors over MQTT.
-- Added comprehensive unit tests in `src/sync/__tests__/sensorSyncHandler.test.ts`.
+- Increase TinyFaceDetector and SsdMobilenetv1 scoreThreshold to 0.55/0.50 in faceRecognition.ts to prevent false-positive intruder alerts on empty or noisy frames
+- Enforce strict >= 0.70 confidence threshold in PresenceTracker before dispatching person_arrival events
+- Upgrade unrecognized person log severity to critical and connect intruder arrivals directly into Supabase notifications state in cameraSyncHandler.ts

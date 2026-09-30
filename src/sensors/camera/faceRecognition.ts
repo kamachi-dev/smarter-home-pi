@@ -276,7 +276,7 @@ export class FaceRecognitionEngine {
 
       for (const size of [416, 512, 320]) {
         try {
-          const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: size, scoreThreshold: size === 416 ? 0.18 : 0.15 });
+          const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: size, scoreThreshold: 0.55 });
           detections = await faceapi.detectAllFaces(tensor, opt).withFaceLandmarks(true).withFaceDescriptors();
           if (detections && detections.length > 0) break;
         } catch {}
@@ -285,7 +285,7 @@ export class FaceRecognitionEngine {
       // Fallback: SSD MobileNet V1 if loaded
       if ((!detections || detections.length === 0) && faceapi.nets.ssdMobilenetv1?.params) {
         try {
-          const ssdOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.15 });
+          const ssdOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.50 });
           detections = await faceapi.detectAllFaces(tensor, ssdOptions).withFaceLandmarks(true).withFaceDescriptors();
         } catch {}
       }

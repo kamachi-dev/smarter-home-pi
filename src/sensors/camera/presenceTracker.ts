@@ -79,6 +79,10 @@ export class PresenceTracker {
     }
 
     for (const rec of detectedFaces) {
+      // Stricter face detection: discard low-confidence detections (< 0.70) to prevent false intruder alerts
+      if (rec.conf < 0.70) {
+        continue;
+      }
       const normalizedName = rec.name.trim();
       const existing = this.trackedPeople.get(normalizedName);
 
