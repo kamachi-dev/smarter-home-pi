@@ -83,7 +83,7 @@ export class AcSyncHandler {
           pollIntervalMs: 0,
           enabled: true,
           options: {
-            activeLow: true,
+            activeLow: false,
             isAcRelay: true,
             roomId: room.id,
             roomName: room.name,

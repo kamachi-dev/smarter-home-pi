@@ -1,5 +1,5 @@
-fix(hardware): implement native pinctrl hardware GPIO switching and prevent cross-pin triggering
+fix(lighting): align relay polarity to active-high default (ON=1, OFF=0)
 
-- Integrate native /usr/bin/pinctrl support in GpioManager for Raspberry Pi hardware
-- Refactor setRoomLightPower in LightingSyncHandler to strictly target only the single assigned GPIO pin for a room
-- Prevent duplicate relay triggering across other GPIO pins sharing room names
+- Invert default RelaySensor polarity so ON drives 1 (HIGH) and OFF drives 0 (LOW)
+- Update default activeLow configuration in LightingSyncHandler and AcSyncHandler
+- Update unit test assertions for active-high default polarity

@@ -6,15 +6,15 @@ import { lightLogger } from './logger.js';
 export class RelaySensor extends BaseSensor {
   private gpioManager: GpioManager;
   private power: boolean = false;
-  private activeLow: boolean = true; // Most 5V/12V relay modules are active LOW
+  private activeLow: boolean = false; // By default: ON -> write 1 (HIGH), OFF -> write 0 (LOW)
   private bcm: number;
 
   constructor(config: SensorConfig) {
     super(config);
     this.gpioManager = GpioManager.getInstance();
     this.bcm = config.bcmGpio ?? 17;
-    // Allow overriding activeLow via config options
-    this.activeLow = config.options?.activeLow !== false;
+    // Allow overriding activeLow via config options if explicitly requested
+    this.activeLow = config.options?.activeLow === true;
     this.power = Boolean(config.options?.initialPower);
   }
 

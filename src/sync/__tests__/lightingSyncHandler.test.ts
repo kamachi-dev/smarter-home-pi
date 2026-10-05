@@ -83,7 +83,7 @@ describe('LightingSyncHandler Realtime & Multi-Channel Sync Tests', () => {
 
     const livingRelay = mockRegistry.getSensor('sensor-relay-17') as RelaySensor;
     assert.strictEqual(livingRelay.getPower(), true);
-    assert.strictEqual(gpioManager.readPin(17), 0); // ActiveLow: ON -> 0
+    assert.strictEqual(gpioManager.readPin(17), 1); // ActiveHigh: ON -> 1
   });
 
   test('should handle broadcast light_toggle event by roomName', async () => {
@@ -96,7 +96,7 @@ describe('LightingSyncHandler Realtime & Multi-Channel Sync Tests', () => {
 
     const kitchenRelay = mockRegistry.getSensor('sensor-relay-27') as RelaySensor;
     assert.strictEqual(kitchenRelay.getPower(), true);
-    assert.strictEqual(gpioManager.readPin(27), 0);
+    assert.strictEqual(gpioManager.readPin(27), 1);
   });
 
   test('should auto-register relay on-the-fly when room record update is received before sync', async () => {
@@ -116,7 +116,7 @@ describe('LightingSyncHandler Realtime & Multi-Channel Sync Tests', () => {
     const relay = mockRegistry.getSensor('sensor-relay-23') as RelaySensor;
     assert.ok(relay, 'New relay should have been auto-registered for GPIO 23');
     assert.strictEqual(relay.getPower(), true);
-    assert.strictEqual(gpioManager.readPin(23), 0);
+    assert.strictEqual(gpioManager.readPin(23), 1);
   });
 
   test('should handle lighting scene broadcast and toggle multiple rooms', async () => {

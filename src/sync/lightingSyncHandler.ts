@@ -84,7 +84,7 @@ export class LightingSyncHandler {
           pollIntervalMs: 0,
           enabled: true,
           options: {
-            activeLow: true,
+            activeLow: false,
             roomId: room.id,
             roomName: room.name,
             initialPower: Boolean(room.lights_power)
@@ -146,7 +146,7 @@ export class LightingSyncHandler {
           pollIntervalMs: 0,
           enabled: true,
           options: {
-            activeLow: true,
+            activeLow: false,
             roomId: room.id,
             roomName: room.name,
             initialPower: room.lights_power
@@ -282,7 +282,7 @@ export class LightingSyncHandler {
           pollIntervalMs: 0,
           enabled: true,
           options: {
-            activeLow: true,
+            activeLow: false,
             roomId: matchedRoom?.id || roomIdentifier,
             roomName: roomLabel,
             initialPower: power
