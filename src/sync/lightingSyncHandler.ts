@@ -111,9 +111,10 @@ export class LightingSyncHandler {
     if (!room) return;
     const bcmGpio = room.light_gpio !== null && room.light_gpio !== undefined && room.light_gpio !== ''
       ? parseInt(String(room.light_gpio), 10)
-      : null;
+      : (room.name && room.name.toLowerCase().includes('living') ? 17 : null);
 
     const controller = (room.light_controller || 'main').toLowerCase();
+    console.log(`[LightingSyncHandler] handleRoomRecordUpdate for room "${room.name}" (GPIO: ${bcmGpio}, controller: ${controller}, power: ${room.lights_power})`);
 
     // If assigned to a sub-controller, forward command over MQTT
     if (controller && !['main', 'hub', 'rpi'].includes(controller)) {
@@ -129,12 +130,34 @@ export class LightingSyncHandler {
       return;
     }
 
-    if (bcmGpio !== null && !isNaN(bcmGpio)) {
-      const relay = this.getRelayByGpio(bcmGpio);
-      if (relay && typeof room.lights_power === 'boolean') {
-        relay.setPower(room.lights_power, 'realtime_supabase');
+    if (bcmGpio !== null && !isNaN(bcmGpio) && typeof room.lights_power === 'boolean') {
+      let relay = this.getRelayByGpio(bcmGpio);
+      if (!relay) {
+        const pin = getPinByBcmGpio(bcmGpio);
+        const sensorConfig: SensorConfig = {
+          id: `sensor-relay-${bcmGpio}`,
+          name: `${room.name || 'Room'} 12V Light Relay (GPIO ${bcmGpio})`,
+          type: 'relay',
+          pinNumber: pin?.pinNumber,
+          bcmGpio,
+          pollIntervalMs: 0,
+          enabled: true,
+          options: {
+            activeLow: true,
+            roomId: room.id,
+            roomName: room.name,
+            initialPower: room.lights_power
+          }
+        };
+        this.registry.registerSensor(sensorConfig, true).then(r => {
+          const registeredRelay = r as RelaySensor;
+          this.activeRelayMap.set(bcmGpio, registeredRelay);
+          registeredRelay.setPower(room.lights_power, 'realtime_supabase');
+        }).catch(err => console.warn(`[LightingSyncHandler] Failed to auto-register relay on GPIO ${bcmGpio}:`, err));
         return;
       }
+      relay.setPower(room.lights_power, 'realtime_supabase');
+      return;
     }
 
     // Fallback match by roomId or name
@@ -148,6 +171,7 @@ export class LightingSyncHandler {
    */
   public handleBroadcastEvent(event: string, payload: any): void {
     if (!payload) return;
+    console.log(`[LightingSyncHandler] handleBroadcastEvent: "${event}"`, payload);
 
     if (event === 'light_toggle') {
       const roomKey = payload.roomId || payload.roomName || payload.room;
@@ -173,6 +197,7 @@ export class LightingSyncHandler {
    */
   public handleStateUpdate(key: string, value: any): void {
     if (key === 'lights' && typeof value === 'object' && value !== null) {
+      console.log('[LightingSyncHandler] handleStateUpdate lights:', value);
       // e.g. value: { livingRoom: { power: true, brightness: 80 }, kitchen: { power: false } }
       for (const [roomKey, lightObj] of Object.entries(value)) {
         const power = (lightObj as any)?.power;
@@ -212,7 +237,7 @@ export class LightingSyncHandler {
     let found = false;
 
     for (const sensor of this.registry.getAllSensors()) {
-      if (sensor instanceof RelaySensor) {
+      if (sensor instanceof RelaySensor && !sensor.config.options?.isAcRelay) {
         const opt = sensor.config.options || {};
         const sensorRoomId = (opt.roomId || '').toLowerCase().replace(/[\s_-]/g, '');
         const sensorRoomName = (opt.roomName || sensor.name || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -220,10 +245,45 @@ export class LightingSyncHandler {
         if (
           sensorRoomId === normalized ||
           sensorRoomName.includes(normalized) ||
+          normalized.includes(sensorRoomName) ||
           (normalized === 'livingroom' && sensor.bcmGpio === 17) // Fallback default
         ) {
           sensor.setPower(power, source);
           found = true;
+        }
+      }
+    }
+
+    if (!found) {
+      const fallbackBcm = (mapped && mapped.bcmGpio) || (normalized === 'livingroom' ? 17 : null);
+      if (fallbackBcm !== null && !isNaN(fallbackBcm)) {
+        let relay = this.getRelayByGpio(fallbackBcm);
+        if (!relay) {
+          const pin = getPinByBcmGpio(fallbackBcm);
+          const sensorConfig: SensorConfig = {
+            id: `sensor-relay-${fallbackBcm}`,
+            name: `${roomIdentifier} 12V Light Relay (GPIO ${fallbackBcm})`,
+            type: 'relay',
+            pinNumber: pin?.pinNumber,
+            bcmGpio: fallbackBcm,
+            pollIntervalMs: 0,
+            enabled: true,
+            options: {
+              activeLow: true,
+              roomId: roomIdentifier,
+              roomName: roomIdentifier,
+              initialPower: power
+            }
+          };
+          this.registry.registerSensor(sensorConfig, true).then(r => {
+            const registeredRelay = r as RelaySensor;
+            this.activeRelayMap.set(fallbackBcm, registeredRelay);
+            registeredRelay.setPower(power, source);
+          }).catch(err => console.warn(`[LightingSyncHandler] Auto-create relay failed on GPIO ${fallbackBcm}:`, err));
+          return true;
+        } else {
+          relay.setPower(power, source);
+          return true;
         }
       }
     }

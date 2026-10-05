@@ -145,7 +145,7 @@ export class SmarterHomeSync {
       this.modelSync.syncAllModelsFromSupabase().catch(() => {});
       this.syncRoomsFromSupabase().catch(() => {});
 
-      // 2. Subscribe to Realtime rooms table changes
+      // 2. Subscribe to Realtime rooms table changes & broadcast toggles
       this.supabase
         .channel('pi-rooms-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, (payload) => {
@@ -156,6 +156,14 @@ export class SmarterHomeSync {
           }
           this.syncRoomsFromSupabase().catch(() => {});
         })
+        .on('broadcast', { event: 'light_toggle' }, ({ payload }) => {
+          console.log('[SmarterHomeSync] Received broadcast light_toggle on pi-rooms-sync:', payload);
+          this.lightingSync.handleBroadcastEvent('light_toggle', payload);
+        })
+        .on('broadcast', { event: 'set_lights' }, ({ payload }) => {
+          console.log('[SmarterHomeSync] Received broadcast set_lights on pi-rooms-sync:', payload);
+          this.lightingSync.handleBroadcastEvent('set_lights', payload);
+        })
         .subscribe();
 
       // 3. Subscribe to Realtime lighting toggles (home_states: key='lights', lighting_states, and broadcast events)
@@ -165,15 +173,15 @@ export class SmarterHomeSync {
       this.supabase
         .channel(lightingChannelName)
         .on('broadcast', { event: 'light_toggle' }, ({ payload }) => {
-          console.log('[SmarterHomeSync] Received Realtime broadcast light_toggle event:', payload);
+          console.log(`[SmarterHomeSync] Received Realtime broadcast light_toggle on ${lightingChannelName}:`, payload);
           this.lightingSync.handleBroadcastEvent('light_toggle', payload);
         })
         .on('broadcast', { event: 'set_lights' }, ({ payload }) => {
-          console.log('[SmarterHomeSync] Received Realtime broadcast set_lights event:', payload);
+          console.log(`[SmarterHomeSync] Received Realtime broadcast set_lights on ${lightingChannelName}:`, payload);
           this.lightingSync.handleBroadcastEvent('set_lights', payload);
         })
         .on('broadcast', { event: 'lighting_scene' }, ({ payload }) => {
-          console.log('[SmarterHomeSync] Received Realtime broadcast lighting_scene event:', payload);
+          console.log(`[SmarterHomeSync] Received Realtime broadcast lighting_scene on ${lightingChannelName}:`, payload);
           this.lightingSync.handleBroadcastEvent('lighting_scene', payload);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'home_states' }, (payload) => {
@@ -197,9 +205,11 @@ export class SmarterHomeSync {
         this.supabase
           .channel('pi-lighting-sync')
           .on('broadcast', { event: 'light_toggle' }, ({ payload }) => {
+            console.log('[SmarterHomeSync] Received broadcast light_toggle on pi-lighting-sync fallback:', payload);
             this.lightingSync.handleBroadcastEvent('light_toggle', payload);
           })
           .on('broadcast', { event: 'set_lights' }, ({ payload }) => {
+            console.log('[SmarterHomeSync] Received broadcast set_lights on pi-lighting-sync fallback:', payload);
             this.lightingSync.handleBroadcastEvent('set_lights', payload);
           })
           .subscribe();

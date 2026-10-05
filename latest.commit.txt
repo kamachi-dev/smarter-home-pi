@@ -1,5 +1,6 @@
-feat(lighting): handle event-driven lighting control via Supabase Realtime broadcast channels
+fix(lighting): ensure real-time supabase sync and hardware GPIO switching for lighting
 
-- Subscribed `smarterHomeSync` to scoped `home-lighting-${homeId}` and `pi-lighting-sync` Supabase Realtime broadcast channels.
-- Added `handleBroadcastEvent` in `LightingSyncHandler` to process `light_toggle`, `set_lights`, and `lighting_scene` events with instantaneous GPIO relay actuation.
-- Retained database change listeners on `rooms` and `home_states` for full multi-source fallback.
+- Force hardware state application on every RelaySensor power update with detailed logging
+- Add on-the-fly relay registration in LightingSyncHandler for dynamic room GPIO switching
+- Add multi-channel broadcast listener on pi-rooms-sync, pi-lighting-sync, and home-lighting channels
+- Fallback to BCM GPIO 17 for default Living Room lighting relay

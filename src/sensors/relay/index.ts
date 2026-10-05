@@ -29,10 +29,10 @@ export class RelaySensor extends BaseSensor {
     // Active high: power ON -> write 1, power OFF -> write 0
     const rawVal = this.activeLow ? (this.power ? 0 : 1) : (this.power ? 1 : 0);
     this.gpioManager.writePin(this.bcm, rawVal as 0 | 1);
+    console.log(`[RelaySensor] BCM GPIO ${this.bcm} -> writePin(${rawVal}) [Power: ${this.power ? 'ON' : 'OFF'}, ActiveLow: ${this.activeLow}]`);
   }
 
   public setPower(power: boolean, source: 'realtime_supabase' | 'local_api' | 'manual' = 'realtime_supabase'): void {
-    if (this.power === power) return;
     this.power = power;
     this.applyHardwareState();
 
