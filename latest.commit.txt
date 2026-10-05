@@ -1,5 +1,5 @@
-feat(camera): enforce strict facial detection thresholds and red intruder alerts
+feat(lighting): handle event-driven lighting control via Supabase Realtime broadcast channels
 
-- Increase TinyFaceDetector and SsdMobilenetv1 scoreThreshold to 0.55/0.50 in faceRecognition.ts to prevent false-positive intruder alerts on empty or noisy frames
-- Enforce strict >= 0.70 confidence threshold in PresenceTracker before dispatching person_arrival events
-- Upgrade unrecognized person log severity to critical and connect intruder arrivals directly into Supabase notifications state in cameraSyncHandler.ts
+- Subscribed `smarterHomeSync` to scoped `home-lighting-${homeId}` and `pi-lighting-sync` Supabase Realtime broadcast channels.
+- Added `handleBroadcastEvent` in `LightingSyncHandler` to process `light_toggle`, `set_lights`, and `lighting_scene` events with instantaneous GPIO relay actuation.
+- Retained database change listeners on `rooms` and `home_states` for full multi-source fallback.

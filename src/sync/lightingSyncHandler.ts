@@ -144,6 +144,30 @@ export class LightingSyncHandler {
   }
 
   /**
+   * Handle real-time broadcast events from Supabase channels (e.g. 'light_toggle', 'set_lights', 'lighting_scene')
+   */
+  public handleBroadcastEvent(event: string, payload: any): void {
+    if (!payload) return;
+
+    if (event === 'light_toggle') {
+      const roomKey = payload.roomId || payload.roomName || payload.room;
+      if (roomKey && typeof payload.power === 'boolean') {
+        this.setRoomLightPower(roomKey, payload.power, 'realtime_supabase');
+      }
+    } else if (event === 'set_lights' || event === 'lighting_scene') {
+      const lightsObj = payload.lights || payload;
+      if (typeof lightsObj === 'object' && lightsObj !== null) {
+        for (const [roomKey, lightObj] of Object.entries(lightsObj)) {
+          const power = (lightObj as any)?.power;
+          if (typeof power === 'boolean') {
+            this.setRoomLightPower(roomKey, power, 'realtime_supabase');
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Handle changes from home_states (e.g. key = 'lights')
    * or direct rooms table updates.
    */

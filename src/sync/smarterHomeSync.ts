@@ -158,9 +158,24 @@ export class SmarterHomeSync {
         })
         .subscribe();
 
-      // 3. Subscribe to Realtime lighting toggles (home_states: key='lights' and lighting_states)
+      // 3. Subscribe to Realtime lighting toggles (home_states: key='lights', lighting_states, and broadcast events)
+      const linkedHomeId = await this.getLinkedHomeId();
+      const lightingChannelName = linkedHomeId ? `home-lighting-${linkedHomeId}` : 'pi-lighting-sync';
+
       this.supabase
-        .channel('pi-lighting-sync')
+        .channel(lightingChannelName)
+        .on('broadcast', { event: 'light_toggle' }, ({ payload }) => {
+          console.log('[SmarterHomeSync] Received Realtime broadcast light_toggle event:', payload);
+          this.lightingSync.handleBroadcastEvent('light_toggle', payload);
+        })
+        .on('broadcast', { event: 'set_lights' }, ({ payload }) => {
+          console.log('[SmarterHomeSync] Received Realtime broadcast set_lights event:', payload);
+          this.lightingSync.handleBroadcastEvent('set_lights', payload);
+        })
+        .on('broadcast', { event: 'lighting_scene' }, ({ payload }) => {
+          console.log('[SmarterHomeSync] Received Realtime broadcast lighting_scene event:', payload);
+          this.lightingSync.handleBroadcastEvent('lighting_scene', payload);
+        })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'home_states' }, (payload) => {
           const record = payload.new as any;
           if (record?.key === 'lights') {
@@ -176,6 +191,19 @@ export class SmarterHomeSync {
           }
         })
         .subscribe();
+
+      if (linkedHomeId) {
+        // Also subscribe to global pi-lighting-sync as fallback
+        this.supabase
+          .channel('pi-lighting-sync')
+          .on('broadcast', { event: 'light_toggle' }, ({ payload }) => {
+            this.lightingSync.handleBroadcastEvent('light_toggle', payload);
+          })
+          .on('broadcast', { event: 'set_lights' }, ({ payload }) => {
+            this.lightingSync.handleBroadcastEvent('set_lights', payload);
+          })
+          .subscribe();
+      }
     } catch (err) {
       console.warn('[SmarterHomeSync] Supabase Realtime init error:', (err as Error).message);
     }
