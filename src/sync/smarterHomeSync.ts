@@ -68,7 +68,8 @@ export class SmarterHomeSync {
     this.lightingSync = new LightingSyncHandler({
       supabase: this.supabase,
       registry: this.registry,
-      getLinkedHomeId: () => this.getLinkedHomeId()
+      getLinkedHomeId: () => this.getLinkedHomeId(),
+      getRooms: () => this.cachedRooms
     });
     this.temperatureSync = new TemperatureSyncHandler({
       supabase: this.supabase,
