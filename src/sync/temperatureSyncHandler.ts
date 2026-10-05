@@ -44,6 +44,8 @@ export class TemperatureSyncHandler {
   public async syncRoomsTemperature(rooms: any[]): Promise<void> {
     if (!Array.isArray(rooms)) return;
 
+    const activePins = new Set<number>();
+
     for (const room of rooms) {
       const bcmGpio = room.temp_gpio !== null && room.temp_gpio !== undefined && room.temp_gpio !== ''
         ? parseInt(String(room.temp_gpio), 10)
@@ -51,6 +53,7 @@ export class TemperatureSyncHandler {
 
       if (bcmGpio === null || isNaN(bcmGpio)) continue;
 
+      activePins.add(bcmGpio);
       const sensorId = `sensor-temp-${bcmGpio}`;
       let tempSensor = this.registry.getSensor(sensorId) as TemperatureSensor | undefined;
 
@@ -73,10 +76,20 @@ export class TemperatureSyncHandler {
 
         try {
           tempSensor = (await this.registry.registerSensor(sensorConfig, true)) as TemperatureSensor;
-          this.activeTempSensors.set(bcmGpio, tempSensor);
         } catch (err) {
           console.warn(`[TemperatureSyncHandler] Failed to register temp sensor on GPIO ${bcmGpio}:`, (err as Error).message);
         }
+      }
+
+      if (tempSensor) {
+        this.activeTempSensors.set(bcmGpio, tempSensor);
+      }
+    }
+
+    // Clear stale pins from activeTempSensors
+    for (const [gpio] of Array.from(this.activeTempSensors.entries())) {
+      if (!activePins.has(gpio)) {
+        this.activeTempSensors.delete(gpio);
       }
     }
   }

@@ -161,7 +161,7 @@ export class SensorSyncHandler {
                 bcmGpio,
                 pollIntervalMs: 0,
                 enabled: true,
-                options: { activeLow: true, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.lights_power) }
+                options: { activeLow: false, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.lights_power) }
               });
             }
           }
@@ -245,13 +245,27 @@ export class SensorSyncHandler {
                 bcmGpio,
                 pollIntervalMs: 0,
                 enabled: true,
-                options: { activeLow: true, isAcRelay: true, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.ac_power) }
+                options: { activeLow: false, isAcRelay: true, roomId: room.id, roomName: room.name, source: 'supabase', initialPower: Boolean(room.ac_power) }
               });
             }
           }
         }
       }
     }
+
+    // Clean up any stale sensors that were previously registered from Supabase but are no longer active
+    for (const sensor of this.registry.getAllSensors()) {
+      if (
+        (sensor.id.startsWith('sensor-relay-') ||
+         sensor.id.startsWith('sensor-temp-') ||
+         sensor.id.startsWith('sensor-ac-relay-')) &&
+        !activeSensorIds.has(sensor.id)
+      ) {
+        console.log(`[SensorSyncHandler] Pruning stale sensor ${sensor.id} (GPIO ${sensor.bcmGpio})`);
+        await this.registry.unregisterSensor(sensor.id, false);
+      }
+    }
+    this.registry.saveConfig();
 
     this.lastSyncedSensors = discoveredMappings;
     const pins = this.registry.getPinsWithAssignments();

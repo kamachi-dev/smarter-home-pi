@@ -26,16 +26,16 @@ describe('RelaySensor Hardware & GPIO Pin Switching Tests', () => {
 
     await relay.init();
 
-    // Initial power is false -> writes 0
+    // Initial power is false -> writes 0 (LOW, off)
     assert.strictEqual(relay.getPower(), false);
     assert.strictEqual(gpioManager.readPin(17), 0);
 
-    // Turn ON -> writes 1
+    // Turn ON -> writes 1 (HIGH, on)
     relay.setPower(true);
     assert.strictEqual(relay.getPower(), true);
     assert.strictEqual(gpioManager.readPin(17), 1);
 
-    // Turn OFF -> writes 0
+    // Turn OFF -> writes 0 (LOW, off)
     relay.setPower(false);
     assert.strictEqual(relay.getPower(), false);
     assert.strictEqual(gpioManager.readPin(17), 0);

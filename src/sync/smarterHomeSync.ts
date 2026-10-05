@@ -187,9 +187,7 @@ export class SmarterHomeSync {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'home_states' }, (payload) => {
           const record = payload.new as any;
-          if (record?.key === 'lights') {
-            this.lightingSync.handleStateUpdate(record.key, record.value);
-          } else if (record?.key === 'room_controllers') {
+          if (record?.key === 'room_controllers') {
             this.syncRoomsFromSupabase().catch(() => {});
           }
         })

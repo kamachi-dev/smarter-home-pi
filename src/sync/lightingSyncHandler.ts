@@ -49,6 +49,9 @@ export class LightingSyncHandler {
   public async syncRoomsLighting(rooms: any[]): Promise<void> {
     if (!Array.isArray(rooms)) return;
 
+    this.roomControllerMap.clear();
+    const activePins = new Set<number>();
+
     for (const room of rooms) {
       const bcmGpio = room.light_gpio !== null && room.light_gpio !== undefined && room.light_gpio !== ''
         ? parseInt(String(room.light_gpio), 10)
@@ -56,11 +59,11 @@ export class LightingSyncHandler {
 
       const controller = (room.light_controller || 'main').toLowerCase();
       if (room.id) {
-        this.roomControllerMap.set(room.id, { controller, bcmGpio });
+        this.roomControllerMap.set(room.id, { controller, bcmGpio, name: room.name });
       }
       if (room.name) {
         const norm = room.name.toLowerCase().replace(/[\s_-]/g, '');
-        this.roomControllerMap.set(norm, { controller, bcmGpio });
+        this.roomControllerMap.set(norm, { controller, bcmGpio, name: room.name });
       }
 
       if (bcmGpio === null || isNaN(bcmGpio)) continue;
@@ -70,6 +73,7 @@ export class LightingSyncHandler {
         continue;
       }
 
+      activePins.add(bcmGpio);
       const sensorId = `sensor-relay-${bcmGpio}`;
       let relay = this.registry.getSensor(sensorId) as RelaySensor | undefined;
 
@@ -93,15 +97,23 @@ export class LightingSyncHandler {
 
         try {
           relay = (await this.registry.registerSensor(sensorConfig, true)) as RelaySensor;
-          this.activeRelayMap.set(bcmGpio, relay);
         } catch (err) {
           console.warn(`[LightingSyncHandler] Failed to register relay on GPIO ${bcmGpio}:`, (err as Error).message);
         }
       }
 
-      // Apply initial room lighting state
-      if (relay && typeof room.lights_power === 'boolean') {
-        relay.setPower(room.lights_power);
+      if (relay) {
+        this.activeRelayMap.set(bcmGpio, relay);
+        if (typeof room.lights_power === 'boolean') {
+          relay.setPower(room.lights_power, 'realtime_supabase');
+        }
+      }
+    }
+
+    // Clear stale pins from activeRelayMap
+    for (const [gpio] of Array.from(this.activeRelayMap.entries())) {
+      if (!activePins.has(gpio)) {
+        this.activeRelayMap.delete(gpio);
       }
     }
   }
@@ -114,7 +126,7 @@ export class LightingSyncHandler {
     if (!room) return;
     const bcmGpio = room.light_gpio !== null && room.light_gpio !== undefined && room.light_gpio !== ''
       ? parseInt(String(room.light_gpio), 10)
-      : (room.name && room.name.toLowerCase().includes('living') ? 17 : null);
+      : null;
 
     const controller = (room.light_controller || 'main').toLowerCase();
     console.log(`[LightingSyncHandler] handleRoomRecordUpdate for room "${room.name}" (GPIO: ${bcmGpio}, controller: ${controller}, power: ${room.lights_power})`);
@@ -264,8 +276,6 @@ export class LightingSyncHandler {
       targetGpio = parseInt(String(matchedRoom.light_gpio), 10);
     } else if (mapped && mapped.bcmGpio !== null && !isNaN(mapped.bcmGpio)) {
       targetGpio = mapped.bcmGpio;
-    } else if (normalized === 'livingroom' || (matchedRoom?.name && matchedRoom.name.toLowerCase().includes('living'))) {
-      targetGpio = 17; // Standard Living Room light pin
     }
 
     if (targetGpio !== null && !isNaN(targetGpio)) {
@@ -300,12 +310,13 @@ export class LightingSyncHandler {
       return true;
     }
 
-    // Fallback: only if no specific GPIO could be determined, find exact sensor ID
+    // Fallback: only if no specific GPIO could be determined, find exact sensor ID or matching room in options
     for (const sensor of this.registry.getAllSensors()) {
       if (sensor instanceof RelaySensor && !sensor.config.options?.isAcRelay) {
         const opt = sensor.config.options || {};
         const sensorRoomId = (opt.roomId || '').toLowerCase().replace(/[\s_-]/g, '');
-        if (sensorRoomId === normalized || sensor.id === `sensor-relay-${normalized}`) {
+        const sensorRoomName = (opt.roomName || '').toLowerCase().replace(/[\s_-]/g, '');
+        if (sensorRoomId === normalized || sensorRoomName === normalized || sensor.id === `sensor-relay-${normalized}`) {
           sensor.setPower(power, source);
           return true;
         }

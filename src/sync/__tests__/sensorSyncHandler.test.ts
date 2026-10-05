@@ -16,12 +16,14 @@ describe('SensorSyncHandler & Supabase GPIO Mapping Tests', () => {
 
     mockRegistry = {
       getSensor: (id: string) => registeredSensors.get(id),
+      getAllSensors: () => Array.from(registeredSensors.values()),
+      saveConfig: () => {},
       registerSensor: async (cfg: any) => {
-        registeredSensors.set(cfg.id, { config: cfg });
+        registeredSensors.set(cfg.id, { id: cfg.id, bcmGpio: cfg.bcmGpio, config: cfg });
         if (cfg.pinNumber) {
           pinAssignments.set(cfg.pinNumber, cfg.id);
         }
-        return { config: cfg };
+        return { id: cfg.id, bcmGpio: cfg.bcmGpio, config: cfg };
       },
       getPinsWithAssignments: () => {
         return RPI_40_PIN_HEADER.map(pin => {
@@ -81,20 +83,21 @@ describe('SensorSyncHandler & Supabase GPIO Mapping Tests', () => {
         getUser: () => Promise.resolve({ data: { user: { id: 'test-user-id' } }, error: null })
       },
       from: (table: string) => {
-        return {
-          select: () => ({
-            eq: (_col: string, id: string) => {
-              const singleRoom = sampleRooms.find(r => r.id === id);
-              return {
-                single: () => Promise.resolve({ data: singleRoom || null, error: null }),
-                then: (fn: any) => Promise.resolve({ data: sampleRooms, error: null }).then(fn)
-              };
-            },
-            limit: () => ({
-              single: () => Promise.resolve({ data: sampleRooms[0] || null, error: null })
-            }),
+        const createQuery = () => {
+          const queryObj: any = {
+            eq: () => queryObj,
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+            single: () => Promise.resolve({ data: sampleRooms[0] || null, error: null }),
+            limit: () => queryObj,
+            select: () => queryObj,
             then: (fn: any) => Promise.resolve({ data: sampleRooms, error: null }).then(fn)
-          }),
+          };
+          return queryObj;
+        };
+
+        return {
+          select: () => createQuery(),
+          upsert: () => Promise.resolve({ data: null, error: null }),
           insert: (payload: any) => ({
             select: () => ({
               single: () => {

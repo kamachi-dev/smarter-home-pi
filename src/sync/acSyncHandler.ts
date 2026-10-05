@@ -48,6 +48,9 @@ export class AcSyncHandler {
   public async syncRoomsAc(rooms: any[]): Promise<void> {
     if (!Array.isArray(rooms)) return;
 
+    this.roomControllerMap.clear();
+    const activePins = new Set<number>();
+
     for (const room of rooms) {
       const bcmGpio = room.ac_gpio !== null && room.ac_gpio !== undefined && room.ac_gpio !== ''
         ? parseInt(String(room.ac_gpio), 10)
@@ -69,6 +72,7 @@ export class AcSyncHandler {
         continue;
       }
 
+      activePins.add(bcmGpio);
       const sensorId = `sensor-ac-relay-${bcmGpio}`;
       let relay = this.registry.getSensor(sensorId) as RelaySensor | undefined;
 
@@ -93,16 +97,24 @@ export class AcSyncHandler {
 
         try {
           relay = (await this.registry.registerSensor(sensorConfig, true)) as RelaySensor;
-          this.activeRelayMap.set(bcmGpio, relay);
           console.log(`[AcSyncHandler] Registered AC Relay for room "${room.name}" on GPIO ${bcmGpio}`);
         } catch (err) {
           console.warn(`[AcSyncHandler] Failed to register AC relay on GPIO ${bcmGpio}:`, (err as Error).message);
         }
       }
 
-      // Apply initial room AC power state
-      if (relay && typeof room.ac_power === 'boolean') {
-        relay.setPower(room.ac_power, 'realtime_supabase');
+      if (relay) {
+        this.activeRelayMap.set(bcmGpio, relay);
+        if (typeof room.ac_power === 'boolean') {
+          relay.setPower(room.ac_power, 'realtime_supabase');
+        }
+      }
+    }
+
+    // Clear stale pins from activeRelayMap
+    for (const [gpio] of Array.from(this.activeRelayMap.entries())) {
+      if (!activePins.has(gpio)) {
+        this.activeRelayMap.delete(gpio);
       }
     }
   }

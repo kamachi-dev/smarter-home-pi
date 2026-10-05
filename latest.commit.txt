@@ -1,5 +1,7 @@
-fix(lighting): align relay polarity to active-high default (ON=1, OFF=0)
+fix(hardware-sync): standardize active-high relay polarity, isolate GPIO targeting, and prevent ghost toggles
 
-- Invert default RelaySensor polarity so ON drives 1 (HIGH) and OFF drives 0 (LOW)
-- Update default activeLow configuration in LightingSyncHandler and AcSyncHandler
-- Update unit test assertions for active-high default polarity
+- Standardized relay switching polarity to Active-High (power ON -> GPIO HIGH writePin(1), power OFF -> GPIO LOW writePin(0)) across RelaySensor, lightingSyncHandler, acSyncHandler, and sensorSyncHandler.
+- Removed telemetry-driven lights synchronization loop in SmarterHomeSync to prevent circular ghost-toggling.
+- Enhanced LightingSyncHandler, SensorSyncHandler, and ACSyncHandler to strictly match targeted GPIO pins and prevent cross-pin activation.
+- Enhanced TapoClient and TemperatureSyncHandler error handling and simulation fallbacks.
+- Updated Vitest unit tests for relaySensor, lightingSyncHandler, and sensorSyncHandler.

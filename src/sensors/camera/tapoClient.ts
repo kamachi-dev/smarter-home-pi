@@ -37,7 +37,10 @@ export class TapoCameraService {
         reuseSession: true,
       });
 
-      await this.tapoClient.init();
+      await Promise.race([
+        this.tapoClient.init(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 2500))
+      ]);
       this.isConnected = true;
       console.log(`[TapoCameraService] ✅ Connected to Tapo Camera at ${this.host}`);
       return true;
