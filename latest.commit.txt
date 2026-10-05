@@ -1,5 +1,5 @@
-fix(lighting): add cached rooms lookup for lighting sync and unit test suites
+fix(hardware): implement native pinctrl hardware GPIO switching and prevent cross-pin triggering
 
-- Pass cached rooms into LightingSyncHandler for multi-identifier matching (UUID, name, key)
-- Add on-the-fly relay registration and fallback to Living Room GPIO 17
-- Add comprehensive test suites for RelaySensor GPIO switching and LightingSyncHandler realtime sync
+- Integrate native /usr/bin/pinctrl support in GpioManager for Raspberry Pi hardware
+- Refactor setRoomLightPower in LightingSyncHandler to strictly target only the single assigned GPIO pin for a room
+- Prevent duplicate relay triggering across other GPIO pins sharing room names
