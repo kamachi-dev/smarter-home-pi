@@ -1,10 +1,5 @@
-feat(responsive): enhance mobile responsiveness across all dashboard and citadel pages
+refactor(lighting): simplify lighting controls to instant on/off switches
 
-- Updated `DashboardHeader.jsx` with responsive flex wrapping, date/time card flex adaptation, and compact mobile status badge metrics.
-- Enhanced `ClimateCitadel` (`/climate`) with mobile-friendly master toggle controls and responsive room AC status badges.
-- Enhanced `LightingStudio` (`/lighting`) with responsive individual bulb controls, wrapping timer select dropdowns and power toggles.
-- Improved `SecurityCitadel` (`/security`) with responsive search/severity toolbar and mobile-optimized event activity logs.
-- Refactored `FamilyAccuracyTable.jsx` and `FamilyMemberModal.jsx` to render a responsive mobile card list view on mobile screens (<640px) and clean modal bounds without viewport clipping.
-- Enhanced `RoomModal.jsx` with responsive dialog dimensions (`w-[95vw] sm:w-[90vw]`) and touch-friendly icon grid.
-- Enhanced `SettingsPage` (`/settings`) and `PiCameraTokenCard.jsx` with responsive invite link and token copy fields.
-- Modularized `AIAssistant.jsx` by extracting `useAssistantConversation.js` and moved room presets to `constants.js` to ensure all source code files remain well under 500 lines.
+- Removed light brightness dimmer sliders, color temperature controls, quick preset scenes, and bulb health diagnostics.
+- Refactored `LightsControl.jsx` on the Dashboard into a clean, minimalist on/off switch interface with a master "All On / All Off" toggle.
+- Refactored `LightingStudio` (`/lighting`) to focus on streamlined per-room relay switches, live illuminated status indicators, and master power control.
