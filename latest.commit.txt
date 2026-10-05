@@ -1,7 +1,10 @@
-fix(hardware-sync): standardize active-high relay polarity, isolate GPIO targeting, and prevent ghost toggles
+feat(responsive): enhance mobile responsiveness across all dashboard and citadel pages
 
-- Standardized relay switching polarity to Active-High (power ON -> GPIO HIGH writePin(1), power OFF -> GPIO LOW writePin(0)) across RelaySensor, lightingSyncHandler, acSyncHandler, and sensorSyncHandler.
-- Removed telemetry-driven lights synchronization loop in SmarterHomeSync to prevent circular ghost-toggling.
-- Enhanced LightingSyncHandler, SensorSyncHandler, and ACSyncHandler to strictly match targeted GPIO pins and prevent cross-pin activation.
-- Enhanced TapoClient and TemperatureSyncHandler error handling and simulation fallbacks.
-- Updated Vitest unit tests for relaySensor, lightingSyncHandler, and sensorSyncHandler.
+- Updated `DashboardHeader.jsx` with responsive flex wrapping, date/time card flex adaptation, and compact mobile status badge metrics.
+- Enhanced `ClimateCitadel` (`/climate`) with mobile-friendly master toggle controls and responsive room AC status badges.
+- Enhanced `LightingStudio` (`/lighting`) with responsive individual bulb controls, wrapping timer select dropdowns and power toggles.
+- Improved `SecurityCitadel` (`/security`) with responsive search/severity toolbar and mobile-optimized event activity logs.
+- Refactored `FamilyAccuracyTable.jsx` and `FamilyMemberModal.jsx` to render a responsive mobile card list view on mobile screens (<640px) and clean modal bounds without viewport clipping.
+- Enhanced `RoomModal.jsx` with responsive dialog dimensions (`w-[95vw] sm:w-[90vw]`) and touch-friendly icon grid.
+- Enhanced `SettingsPage` (`/settings`) and `PiCameraTokenCard.jsx` with responsive invite link and token copy fields.
+- Modularized `AIAssistant.jsx` by extracting `useAssistantConversation.js` and moved room presets to `constants.js` to ensure all source code files remain well under 500 lines.
